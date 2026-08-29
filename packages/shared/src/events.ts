@@ -1,0 +1,46 @@
+export const PLAYER_EVENTS = {
+  hello: "player:hello",
+  chooseTeam: "player:choose_team",
+  switchTeam: "player:switch_team",
+  tap: "player:tap",
+  requestSync: "player:request_sync",
+} as const;
+
+export const ADMIN_EVENTS = {
+  open: "admin:open",
+  lock: "admin:lock",
+  requestVolunteers: "admin:request_volunteers",
+  autoBalance: "admin:auto_balance",
+  setWildcard: "admin:set_wildcard",
+  cancelBalance: "admin:cancel_balance",
+  startCountdown: "admin:start_countdown",
+  pause: "admin:pause",
+  resume: "admin:resume",
+  extend: "admin:extend",
+  endRound: "admin:end_round",
+  playAgain: "admin:play_again",
+  shufflePlay: "admin:shuffle_play",
+  endEvent: "admin:end_event",
+  resetSession: "admin:reset_session",
+  emergencyStop: "admin:emergency_stop",
+} as const;
+
+export const SERVER_EVENTS = {
+  sync: "sync",
+  phase: "game:phase",
+  counts: "game:counts",
+  balancePlan: "game:balance_plan",
+  balanceMove: "game:balance_move",
+  wildcard: "game:wildcard",
+  countdown: "game:countdown",
+  score: "game:score",
+  time: "game:time",
+  extended: "game:extended",
+  paused: "game:paused",
+  resumed: "game:resumed",
+  finished: "game:finished",
+  round: "game:round",
+  you: "player:you",
+  replaced: "player:replaced",
+  error: "error",
+} as const;

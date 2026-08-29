@@ -1,0 +1,17 @@
+{
+  "name": "tug-of-war",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@9.15.9",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @tow/server --filter @tow/web --parallel dev",
+    "dev:web": "pnpm --filter @tow/web dev",
+    "dev:server": "pnpm --filter @tow/server dev",
+    "build": "pnpm --filter @tow/shared build && pnpm --filter @tow/server build && pnpm --filter @tow/web build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "corepack pnpm --filter @tow/shared test && corepack pnpm --filter @tow/server test && corepack pnpm --filter @tow/web test"
+  }
+}

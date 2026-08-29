@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: tow-game-server
+    runtime: node
+    plan: standard
+    buildCommand: corepack pnpm --filter @tow/server build
+    startCommand: corepack pnpm --filter @tow/server start
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3001
+      - key: CLIENT_ORIGIN
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: MONGODB_URI
+        sync: false
+      - key: PLAYER_TOKEN_SECRET
+        generateValue: true
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: DISPLAY_SECRET
+        sync: false
