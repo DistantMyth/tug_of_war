@@ -176,10 +176,10 @@ export const AdminPage: React.FC = () => {
           <form onSubmit={handleLogin} className="flex items-center gap-2">
             <input
               type="password"
-              placeholder="Admin Secret..."
+              placeholder="Admin Password (default: admin)"
               value={passwordInput}
               onChange={(e) => setPasswordInput(e.target.value)}
-              className="px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-xs font-mono-condensed text-slate-200 focus:outline-none focus:border-cyan-500"
+              className="px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-xs font-mono-condensed text-slate-200 focus:outline-none focus:border-cyan-500 min-w-[220px]"
             />
             <button
               type="submit"

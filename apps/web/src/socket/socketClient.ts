@@ -72,6 +72,7 @@ class SocketClient {
     this.socket = io(serverUrl, {
       auth,
       transports: ["websocket", "polling"],
+      extraHeaders: { "Bypass-Tunnel-Reminder": "true" },
       reconnection: true,
       reconnectionAttempts: Infinity,
       reconnectionDelay: 1000,
@@ -98,6 +99,7 @@ class SocketClient {
       const socket = io(serverUrl, {
         auth: { role: "admin", adminToken: secret },
         transports: ["websocket", "polling"],
+        extraHeaders: { "Bypass-Tunnel-Reminder": "true" },
         reconnection: false,
         timeout: 8000,
       });
@@ -163,6 +165,7 @@ class SocketClient {
       const socket = io(serverUrl, {
         auth: { role: "display", displayToken: secret },
         transports: ["websocket", "polling"],
+        extraHeaders: { "Bypass-Tunnel-Reminder": "true" },
         reconnection: false, // Managed manually after first success
         timeout: 8000,
       });
