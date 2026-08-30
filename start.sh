@@ -65,7 +65,46 @@ elif command -v cloudflared &> /dev/null; then
   CLOUDFLARED_BIN="cloudflared"
 fi
 
-if [ "$1" == "--tunnel" ] || [ "$1" == "-t" ]; then
+# 4. Routing Options
+# Modes:
+#   --local / --localroute / --lan (Default): Ultra-low 0ms latency LAN / Wi-Fi Hotspot
+#   --localtunnel / --lt: Localtunnel public HTTP/WebSocket proxy
+#   --pinggy / --ssh: Instant high-speed SSH reverse tunnel
+#   --tunnel / --cloudflare / -t: Cloudflare quick tunnel
+
+MODE="local"
+TUNNEL_URL=""
+
+for arg in "$@"; do
+  case $arg in
+    --local|--localroute|--lan|-l)
+      MODE="local"
+      ;;
+    --tunnel|--cloudflare|-t)
+      MODE="cloudflare"
+      ;;
+    --localtunnel|--lt)
+      MODE="localtunnel"
+      ;;
+    --pinggy|--ssh)
+      MODE="pinggy"
+      ;;
+    --help|-h)
+      echo "Usage: ./start.sh [OPTION]"
+      echo ""
+      echo "Options:"
+      echo "  --local, --localroute, --lan  (Default) 0ms latency direct LAN / Wi-Fi Hotspot"
+      echo "  --localtunnel, --lt           Localtunnel public proxy"
+      echo "  --pinggy, --ssh               Pinggy low-latency SSH tunnel"
+      echo "  --tunnel, --cloudflare, -t    Cloudflare quick tunnel"
+      echo "  --help, -h                    Show this help message"
+      echo ""
+      exit 0
+      ;;
+  esac
+done
+
+if [ "$MODE" == "cloudflare" ]; then
   if [ -n "$CLOUDFLARED_BIN" ]; then
     echo "🌐 Starting high-capacity Cloudflare tunnel..."
     rm -f /tmp/tow_cloudflared.log
@@ -73,7 +112,6 @@ if [ "$1" == "--tunnel" ] || [ "$1" == "-t" ]; then
     TUNNEL_PID=$!
 
     # Poll for the assigned trycloudflare.com URL
-    TUNNEL_URL=""
     for i in {1..30}; do
       if [ -f /tmp/tow_cloudflared.log ]; then
         TUNNEL_URL=$(grep -oE 'https://[a-zA-Z0-9-]+\.trycloudflare\.com' /tmp/tow_cloudflared.log | head -n 1 || true)
@@ -83,25 +121,49 @@ if [ "$1" == "--tunnel" ] || [ "$1" == "-t" ]; then
       fi
       sleep 0.5
     done
-
-    if [ -n "$TUNNEL_URL" ]; then
-      export PUBLIC_URL="$TUNNEL_URL"
-      echo ""
-      echo "================================================================="
-      echo "  🌟 PUBLIC INTERNET READY (200+ PLAYERS ON 4G/5G/CELLULAR)"
-      echo "================================================================="
-      echo "  📺 Projector / Display:   $TUNNEL_URL/display"
-      echo "  🛡️  Admin Dashboard:      $TUNNEL_URL/admin"
-      echo "  📱 Mobile Join Page:      $TUNNEL_URL/join"
-      echo "  🔌 Health Check:          $TUNNEL_URL/health"
-      echo "================================================================="
-      echo ""
-    fi
-  else
-    echo "🌐 Starting localtunnel..."
-    npx --yes localtunnel --port "$PORT" &
-    TUNNEL_PID=$!
   fi
+elif [ "$MODE" == "localtunnel" ]; then
+  echo "🌐 Starting Localtunnel (https://localtunnel.me)..."
+  rm -f /tmp/tow_lt.log
+  npx --yes localtunnel --port "$PORT" > /tmp/tow_lt.log 2>&1 &
+  TUNNEL_PID=$!
+  for i in {1..20}; do
+    if [ -f /tmp/tow_lt.log ]; then
+      TUNNEL_URL=$(grep -oE 'https://[a-zA-Z0-9-]+\.loca\.lt' /tmp/tow_lt.log | head -n 1 || true)
+      if [ -n "$TUNNEL_URL" ]; then
+        break
+      fi
+    fi
+    sleep 0.5
+  done
+elif [ "$MODE" == "pinggy" ]; then
+  echo "🌐 Starting Pinggy SSH Low-Latency Tunnel..."
+  rm -f /tmp/tow_pinggy.log
+  ssh -p 443 -R0:localhost:$PORT -o StrictHostKeyChecking=no -o ServerAliveInterval=30 a.pinggy.io > /tmp/tow_pinggy.log 2>&1 &
+  TUNNEL_PID=$!
+  for i in {1..20}; do
+    if [ -f /tmp/tow_pinggy.log ]; then
+      TUNNEL_URL=$(grep -oE 'https://[a-zA-Z0-9-]+\.a\.pinggy\.link' /tmp/tow_pinggy.log | head -n 1 || true)
+      if [ -n "$TUNNEL_URL" ]; then
+        break
+      fi
+    fi
+    sleep 0.5
+  done
+fi
+
+if [ -n "$TUNNEL_URL" ]; then
+  export PUBLIC_URL="$TUNNEL_URL"
+  echo ""
+  echo "================================================================="
+  echo "  🌟 PUBLIC INTERNET READY (MODE: $MODE)"
+  echo "================================================================="
+  echo "  📺 Projector / Display:   $TUNNEL_URL/display"
+  echo "  🛡️  Admin Dashboard:      $TUNNEL_URL/admin"
+  echo "  📱 Mobile Join Page:      $TUNNEL_URL/join"
+  echo "  🔌 Health Check:          $TUNNEL_URL/health"
+  echo "================================================================="
+  echo ""
 fi
 
 # 5. Start Backend Server
@@ -113,17 +175,23 @@ sleep 2
 
 if [ -z "$TUNNEL_URL" ]; then
   echo ""
-  echo "-----------------------------------------------------------------"
-  echo "  💻 LOCAL SERVER READY"
-  echo "-----------------------------------------------------------------"
+  echo "================================================================="
+  echo "  ⚡ LOCALROUTE (0ms ULTRA-LOW LATENCY LAN / WI-FI HOTSPOT)"
+  echo "================================================================="
   echo "  📺 Projector / Display:   http://$LOCAL_IP:$PORT/display"
   echo "  🛡️  Admin Dashboard:      http://localhost:$PORT/admin"
   echo "  📱 Mobile Join Page:      http://$LOCAL_IP:$PORT/join"
   echo "  🔌 Health Check:          http://localhost:$PORT/health"
-  echo "-----------------------------------------------------------------"
+  echo "================================================================="
   echo ""
-  echo "💡 Tip: To expose to mobile 4G/5G players outside local Wi-Fi, run:"
-  echo "        ./start.sh --tunnel"
+  echo "💡 Tip for 0-lag events:"
+  echo "   Connect phones to the same Wi-Fi router or turn on your laptop's"
+  echo "   Mobile Hotspot. Audience scans the QR code to join instantly!"
+  echo ""
+  echo "💡 Need a public tunnel over cellular? Options:"
+  echo "   ./start.sh --localtunnel  (Fast Localtunnel)"
+  echo "   ./start.sh --pinggy       (SSH Low-Latency Tunnel)"
+  echo "   ./start.sh --tunnel       (Cloudflare Tunnel)"
 fi
 
 echo ""
