@@ -71,13 +71,13 @@ class SocketClient {
 
     this.socket = io(serverUrl, {
       auth,
-      transports: ["websocket", "polling"],
+      transports: ["polling", "websocket"],
       extraHeaders: { "Bypass-Tunnel-Reminder": "true" },
       reconnection: true,
       reconnectionAttempts: Infinity,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
-      timeout: 10000,
+      timeout: 15000,
     });
 
     this.setupListeners();
@@ -98,10 +98,10 @@ class SocketClient {
       const serverUrl = getSocketUrl();
       const socket = io(serverUrl, {
         auth: { role: "admin", adminToken: secret },
-        transports: ["websocket", "polling"],
+        transports: ["polling", "websocket"],
         extraHeaders: { "Bypass-Tunnel-Reminder": "true" },
         reconnection: false,
-        timeout: 8000,
+        timeout: 15000,
       });
 
       this.socket = socket;
@@ -134,7 +134,7 @@ class SocketClient {
       // Safety: resolve with error after timeout if neither event fires
       setTimeout(() => {
         settle({ ok: false, message: "Connection timed out" });
-      }, 9000);
+      }, 15000);
     });
   }
 
@@ -164,10 +164,10 @@ class SocketClient {
       const serverUrl = getSocketUrl();
       const socket = io(serverUrl, {
         auth: { role: "display", displayToken: secret },
-        transports: ["websocket", "polling"],
+        transports: ["polling", "websocket"],
         extraHeaders: { "Bypass-Tunnel-Reminder": "true" },
         reconnection: false, // Managed manually after first success
-        timeout: 8000,
+        timeout: 15000,
       });
 
       this.displaySocket = socket;
