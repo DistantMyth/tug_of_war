@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import cors from "cors";
 import express from "express";
 import helmet from "helmet";
@@ -16,7 +18,7 @@ export type AppOptions = {
 
 export function createApp(options?: AppOptions): express.Express {
   const app = express();
-  const origin = process.env.CLIENT_ORIGIN ?? "http://localhost:5173";
+  const origin = process.env.CLIENT_ORIGIN || true;
 
   const repo =
     options?.repository ??
@@ -36,7 +38,7 @@ export function createApp(options?: AppOptions): express.Express {
   );
   app.use(
     cors({
-      origin,
+      origin: origin === "*" ? true : origin,
       credentials: true,
     }),
   );
@@ -44,6 +46,24 @@ export function createApp(options?: AppOptions): express.Express {
   app.use(healthRouter);
   app.use(createPlayerRouter(identityService));
   app.use(createSessionRouter(identityService));
+
+  // Serve static web build if present (for single-port laptop hosting and tunneling)
+  const possibleDistPaths = [
+    path.resolve(process.cwd(), "apps/web/dist"),
+    path.resolve(process.cwd(), "../web/dist"),
+    path.resolve(process.cwd(), "dist"),
+  ];
+
+  const staticDir = possibleDistPaths.find((p) => fs.existsSync(path.join(p, "index.html")));
+  if (staticDir) {
+    app.use(express.static(staticDir));
+    app.get("*", (req, res, next) => {
+      if (req.path.startsWith("/api") || req.path.startsWith("/health") || req.path.startsWith("/socket.io")) {
+        return next();
+      }
+      res.sendFile(path.join(staticDir, "index.html"));
+    });
+  }
 
   return app;
 }

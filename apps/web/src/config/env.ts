@@ -11,9 +11,17 @@ export function getApiBaseUrl(): string {
     return envUrl.trim().replace(/\/+$/, "");
   }
 
-  const host = typeof window !== "undefined" ? window.location.hostname : "localhost";
-  const protocol = typeof window !== "undefined" && window.location.protocol === "https:" ? "https:" : "http:";
-  return `${protocol}//${host}:3001`;
+  if (typeof window !== "undefined") {
+    // When running Vite dev server on port 5173, backend is on port 3001
+    if (window.location.port === "5173") {
+      const protocol = window.location.protocol === "https:" ? "https:" : "http:";
+      return `${protocol}//${window.location.hostname}:3001`;
+    }
+    // When accessed via tunnel, reverse proxy, or production server, use same origin
+    return window.location.origin;
+  }
+
+  return "http://localhost:3001";
 }
 
 export function getApiUrl(path: string): string {
@@ -29,7 +37,15 @@ export function getSocketUrl(): string {
     return base.endsWith("/game") ? base : `${base}/game`;
   }
 
-  const host = typeof window !== "undefined" ? window.location.hostname : "localhost";
-  const protocol = typeof window !== "undefined" && window.location.protocol === "https:" ? "https:" : "http:";
-  return `${protocol}//${host}:3001/game`;
+  if (typeof window !== "undefined") {
+    // When running Vite dev server on port 5173, backend is on port 3001
+    if (window.location.port === "5173") {
+      const protocol = window.location.protocol === "https:" ? "https:" : "http:";
+      return `${protocol}//${window.location.hostname}:3001/game`;
+    }
+    // When accessed via tunnel, reverse proxy, or production server, use same origin
+    return `${window.location.origin}/game`;
+  }
+
+  return "http://localhost:3001/game";
 }

@@ -47,11 +47,11 @@ export function setupGameSocketServer(
 
   const identityService = options?.identityService ?? new PlayerIdentityService(repository);
   const connectionManager = options?.connectionManager ?? new GameConnectionManager();
-  const corsOrigin = options?.corsOrigin ?? process.env.CLIENT_ORIGIN ?? "http://localhost:5173";
+  const corsOrigin = options?.corsOrigin ?? (process.env.CLIENT_ORIGIN || true);
 
   const io: GameServer = new Server(httpServer, {
     cors: {
-      origin: corsOrigin,
+      origin: corsOrigin === "*" ? true : corsOrigin,
       credentials: true,
     },
     transports: ["websocket", "polling"],
