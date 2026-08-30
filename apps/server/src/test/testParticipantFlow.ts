@@ -5,7 +5,7 @@ async function testParticipantFlow() {
   console.log(`Testing Participant Flow against ${baseUrl}...`);
 
   // 1. Register / Get Participant Session Token via HTTP API
-  const regRes = await fetch(`${baseUrl}/api/player/register`, {
+  const regRes: any = await fetch(`${baseUrl}/api/player/register`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({}),

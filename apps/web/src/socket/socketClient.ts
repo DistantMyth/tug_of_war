@@ -128,7 +128,11 @@ class SocketClient {
       });
 
       socket.once("connect_error", (err: Error) => {
-        settle({ ok: false, message: err.message });
+        let msg = err.message;
+        if (msg.includes("xhr poll error") || msg.includes("websocket error")) {
+          msg = "Invalid admin secret or rejected by server";
+        }
+        settle({ ok: false, message: msg });
       });
 
       // Safety: resolve with error after timeout if neither event fires

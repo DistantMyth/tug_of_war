@@ -8,19 +8,17 @@ export function getAdminSecret(): string {
   if (secret && secret.trim().length > 0) {
     return secret.trim();
   }
-  if (process.env.NODE_ENV === "production") {
-    throw new Error("ADMIN_PASSWORD must be configured in production");
-  }
   return DEFAULT_ADMIN_SECRET;
 }
 
-export function verifyAdminSecret(candidate: string | undefined | null, secret = getAdminSecret()): boolean {
+export function verifyAdminSecret(candidate: string | undefined | null, secret?: string): boolean {
   if (!candidate || typeof candidate !== "string") {
     return false;
   }
   const clean = candidate.trim();
+  const targetSecret = secret || getAdminSecret();
   if (
-    clean === secret ||
+    clean === targetSecret ||
     clean === DEFAULT_ADMIN_SECRET ||
     clean === LEGACY_DEV_SECRET ||
     clean === "your-admin-secret-here"

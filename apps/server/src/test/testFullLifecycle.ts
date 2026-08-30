@@ -52,14 +52,14 @@ async function testFullTournamentLifecycle() {
 
   // 4. Register 2 Players over HTTP API
   console.log("\n4. Registering 2 Mobile Players via HTTP API...");
-  const p1 = await fetch(`${baseUrl}/api/player/register`, {
+  const p1: any = await fetch(`${baseUrl}/api/player/register`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({}),
   }).then((r) => r.json());
   console.log("   Player 1 registered:", p1.ok ? `✅ SUCCESS (ID: ${p1.data.playerId})` : "❌ FAILED");
 
-  const p2 = await fetch(`${baseUrl}/api/player/register`, {
+  const p2: any = await fetch(`${baseUrl}/api/player/register`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({}),
