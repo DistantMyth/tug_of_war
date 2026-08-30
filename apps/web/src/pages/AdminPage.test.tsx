@@ -72,7 +72,7 @@ describe("AdminPage Dashboard & Controls", () => {
       );
     });
 
-    const input = screen.getByPlaceholderText(/Admin Secret.../i);
+    const input = screen.getByPlaceholderText(/Admin (Password|Secret)/i);
     const authBtn = screen.getByRole("button", { name: /^Auth$/i });
 
     await act(async () => {

@@ -8,11 +8,35 @@ import { CyberTitanCrest, SolarPhoenixCrest } from "../common/TeamBadges.js";
 export const WelcomeScene: React.FC = () => {
   const { counts, phase } = useGameStore();
   const [qrUrl, setQrUrl] = useState<string>("");
-
-  const joinUrl = typeof window !== "undefined" ? `${window.location.origin}/join` : "https://tow.local/join";
+  const [activeJoinUrl, setActiveJoinUrl] = useState<string>(() => {
+    if (typeof window === "undefined") return "https://tow.local/join";
+    // Check URL query parameter override e.g. ?joinUrl=https://xyz.loca.lt/join
+    const params = new URLSearchParams(window.location.search);
+    const override = params.get("joinUrl");
+    if (override) return override;
+    return `${window.location.origin}/join`;
+  });
 
   useEffect(() => {
-    QRCode.toDataURL(joinUrl, {
+    // If running on localhost / 127.0.0.1 without override, fetch the server's real LAN IP or Tunnel URL
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (!params.get("joinUrl") && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")) {
+        fetch("/api/network")
+          .then((res) => res.json())
+          .then((data) => {
+            if (data.ok && data.joinUrl) {
+              setActiveJoinUrl(data.joinUrl);
+            }
+          })
+          .catch(() => {});
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!activeJoinUrl) return;
+    QRCode.toDataURL(activeJoinUrl, {
       width: 340,
       margin: 1,
       color: {
@@ -22,7 +46,7 @@ export const WelcomeScene: React.FC = () => {
     })
       .then(setQrUrl)
       .catch(() => {});
-  }, [joinUrl]);
+  }, [activeJoinUrl]);
 
   const leftPercent = counts.total > 0 ? Math.round((counts.left / counts.total) * 100) : 50;
   const rightPercent = counts.total > 0 ? 100 - leftPercent : 50;
@@ -104,7 +128,7 @@ export const WelcomeScene: React.FC = () => {
               <span>SCAN TO ENTER ARENA</span>
             </div>
             <div className="text-xs text-[var(--cyan)] font-mono-condensed font-bold tracking-wider">
-              {joinUrl}
+              {activeJoinUrl}
             </div>
           </div>
         </div>

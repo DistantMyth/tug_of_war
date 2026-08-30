@@ -15,6 +15,20 @@ export function setMongoStatusProvider(provider: () => DependencyStatus): void {
 
 export const healthRouter = Router();
 
+import os from "node:os";
+
+export function getPrimaryLocalIp(): string {
+  const interfaces = os.networkInterfaces();
+  for (const name of Object.keys(interfaces)) {
+    for (const iface of interfaces[name] || []) {
+      if (iface.family === "IPv4" && !iface.internal && !iface.address.startsWith("127.")) {
+        return iface.address;
+      }
+    }
+  }
+  return "localhost";
+}
+
 healthRouter.get("/health", async (_req, res) => {
   const redisStatus = await checkRedisHealth();
   const report = buildHealthReport({
@@ -25,5 +39,19 @@ healthRouter.get("/health", async (_req, res) => {
     uptime: process.uptime(),
   });
   res.status(report.ok ? 200 : 503).json(report);
+});
+
+healthRouter.get("/api/network", (_req, res) => {
+  const localIp = getPrimaryLocalIp();
+  const port = Number(process.env.PORT ?? 3001);
+  const publicUrl = process.env.PUBLIC_URL || process.env.TUNNEL_URL || null;
+  const joinUrl = publicUrl ? `${publicUrl.replace(/\/+$/, "")}/join` : `http://${localIp}:${port}/join`;
+  res.json({
+    ok: true,
+    localIp,
+    port,
+    publicUrl,
+    joinUrl,
+  });
 });
 
