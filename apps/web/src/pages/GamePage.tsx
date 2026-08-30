@@ -14,6 +14,7 @@ import { useConnectionStore } from "../store/useConnectionStore.js";
 import { useGameStore } from "../store/useGameStore.js";
 import { useSessionStore } from "../store/useSessionStore.js";
 import { useUiStore } from "../store/useUiStore.js";
+import { BattleHud } from "../components/game/BattleHud.js";
 
 export const GamePage: React.FC = () => {
   const navigate = useNavigate();
@@ -318,43 +319,12 @@ export const GamePage: React.FC = () => {
             </span>
           </div>
 
-          {/* GIANT TAP BUTTON */}
-          <div className="relative flex items-center justify-center my-4">
-            {tapRipple && (
-              <div
-                className={`absolute inset-0 rounded-full animate-tap-ripple ${
-                  isLeft ? "bg-cyan-400/40" : "bg-amber-400/40"
-                }`}
-              />
-            )}
+          <BattleHud leftScore={scores.left} rightScore={scores.right} time={remainingTime} phase={phase === "PAUSED" ? "PAUSED" : "LIVE"} activeTeam={team} />
 
-            <button
-              disabled={phase === "PAUSED"}
-              onClick={handleTap}
-              className={`relative w-64 h-64 md:w-72 md:h-72 rounded-full border-4 flex flex-col items-center justify-center active:scale-95 transition-transform duration-75 shadow-2xl cursor-pointer ${
-                phase === "PAUSED"
-                  ? "bg-slate-900 border-slate-700 text-slate-500 opacity-60"
-                  : isLeft
-                    ? "bg-gradient-to-b from-cyan-600 to-cyan-800 border-cyan-300 text-slate-950 box-glow-cyan"
-                    : "bg-gradient-to-b from-amber-600 to-amber-800 border-amber-300 text-slate-950 box-glow-amber"
-              }`}
-            >
-              {phase === "PAUSED" ? (
-                <>
-                  <Pause className="w-16 h-16 text-amber-400 mb-2 animate-pulse" />
-                  <div className="font-display text-xl tracking-wider text-slate-300 uppercase">PAUSED</div>
-                </>
-              ) : (
-                <>
-                  <Flame className="w-20 h-20 text-slate-950 mb-2 drop-shadow-md" />
-                  <div className="font-display text-5xl tracking-widest text-slate-950 uppercase font-black">
-                    TAP!
-                  </div>
-                  <div className="text-[11px] font-mono-condensed tracking-wider font-bold text-slate-900 mt-1 uppercase">
-                    FOR TEAM {team?.toUpperCase()}
-                  </div>
-                </>
-              )}
+          <div className="relative flex items-center justify-center my-4">
+            {tapRipple && <div className={`absolute inset-0 rounded-full animate-tap-ripple ${isLeft ? "bg-cyan-400/40" : "bg-red-400/40"}`} />}
+            <button disabled={phase === "PAUSED"} onClick={handleTap} aria-label={`Tap for team ${team}`} className={`relative size-56 md:size-64 rounded-full border-4 flex flex-col items-center justify-center active:scale-95 transition-transform duration-75 cursor-pointer ${phase === "PAUSED" ? "bg-slate-900 border-slate-700 text-slate-500 opacity-60" : isLeft ? "bg-cyan-300 border-cyan-100 text-slate-950 box-glow-cyan" : "bg-red-400 border-red-100 text-slate-950 box-glow-amber"}`}>
+              {phase === "PAUSED" ? <><Pause className="w-16 h-16 text-amber-400 mb-2 animate-pulse" /><div className="font-display text-xl tracking-wider uppercase">PAUSED</div></> : <><Flame className="w-16 h-16 mb-2" /><div className="font-display text-5xl tracking-widest font-black">TAP</div><div className="text-[11px] font-mono-condensed tracking-wider font-bold mt-1 uppercase">FOR TEAM {team?.toUpperCase()}</div></>}
             </button>
           </div>
 
