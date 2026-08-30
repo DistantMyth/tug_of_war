@@ -42,17 +42,6 @@ if [ -z "$LOCAL_IP" ]; then
   LOCAL_IP="localhost"
 fi
 
-echo ""
-echo "-----------------------------------------------------------------"
-echo "  💻 LOCAL SERVER READY"
-echo "-----------------------------------------------------------------"
-echo "  📺 Projector / Display:   http://$LOCAL_IP:$PORT/display"
-echo "  🛡️  Admin Dashboard:      http://localhost:$PORT/admin"
-echo "  📱 Mobile Join Page:      http://$LOCAL_IP:$PORT/join"
-echo "  🔌 Health Check:          http://localhost:$PORT/health"
-echo "-----------------------------------------------------------------"
-echo ""
-
 # Handle clean shutdown on Ctrl+C / SIGTERM
 cleanup() {
   echo ""
@@ -63,34 +52,77 @@ cleanup() {
   if [ -n "$TUNNEL_PID" ]; then
     kill "$TUNNEL_PID" 2>/dev/null || true
   fi
+  rm -f /tmp/tow_cloudflared.log 2>/dev/null || true
   exit 0
 }
 trap cleanup SIGINT SIGTERM EXIT
 
-# 4. Start Backend Server in Background
+# 4. Optional Public Tunnel using Cloudflare (No account, native WebSockets, 200+ capacity)
+CLOUDFLARED_BIN=""
+if [ -x "./bin/cloudflared" ]; then
+  CLOUDFLARED_BIN="./bin/cloudflared"
+elif command -v cloudflared &> /dev/null; then
+  CLOUDFLARED_BIN="cloudflared"
+fi
+
+if [ "$1" == "--tunnel" ] || [ "$1" == "-t" ]; then
+  if [ -n "$CLOUDFLARED_BIN" ]; then
+    echo "🌐 Starting high-capacity Cloudflare tunnel..."
+    rm -f /tmp/tow_cloudflared.log
+    $CLOUDFLARED_BIN tunnel --url "http://localhost:$PORT" > /tmp/tow_cloudflared.log 2>&1 &
+    TUNNEL_PID=$!
+
+    # Poll for the assigned trycloudflare.com URL
+    TUNNEL_URL=""
+    for i in {1..30}; do
+      if [ -f /tmp/tow_cloudflared.log ]; then
+        TUNNEL_URL=$(grep -oE 'https://[a-zA-Z0-9-]+\.trycloudflare\.com' /tmp/tow_cloudflared.log | head -n 1 || true)
+        if [ -n "$TUNNEL_URL" ]; then
+          break
+        fi
+      fi
+      sleep 0.5
+    done
+
+    if [ -n "$TUNNEL_URL" ]; then
+      export PUBLIC_URL="$TUNNEL_URL"
+      echo ""
+      echo "================================================================="
+      echo "  🌟 PUBLIC INTERNET READY (200+ PLAYERS ON 4G/5G/CELLULAR)"
+      echo "================================================================="
+      echo "  📺 Projector / Display:   $TUNNEL_URL/display"
+      echo "  🛡️  Admin Dashboard:      $TUNNEL_URL/admin"
+      echo "  📱 Mobile Join Page:      $TUNNEL_URL/join"
+      echo "  🔌 Health Check:          $TUNNEL_URL/health"
+      echo "================================================================="
+      echo ""
+    fi
+  else
+    echo "🌐 Starting localtunnel..."
+    npx --yes localtunnel --port "$PORT" &
+    TUNNEL_PID=$!
+  fi
+fi
+
+# 5. Start Backend Server
 echo "⚡ Starting backend server on port $PORT..."
 pnpm --filter @tow/server start &
 SERVER_PID=$!
 
-# Wait briefly for server to bind
 sleep 2
 
-# 5. Optional Public Tunnel (for cellular/mobile players outside local Wi-Fi)
-if [ "$1" == "--tunnel" ] || [ "$1" == "-t" ]; then
+if [ -z "$TUNNEL_URL" ]; then
   echo ""
-  echo "🌐 Starting public internet tunnel for mobile players..."
   echo "-----------------------------------------------------------------"
-  if command -v cloudflared &> /dev/null; then
-    cloudflared tunnel --url "http://localhost:$PORT" &
-    TUNNEL_PID=$!
-  else
-    npx --yes localtunnel --port "$PORT" &
-    TUNNEL_PID=$!
-  fi
+  echo "  💻 LOCAL SERVER READY"
+  echo "-----------------------------------------------------------------"
+  echo "  📺 Projector / Display:   http://$LOCAL_IP:$PORT/display"
+  echo "  🛡️  Admin Dashboard:      http://localhost:$PORT/admin"
+  echo "  📱 Mobile Join Page:      http://$LOCAL_IP:$PORT/join"
+  echo "  🔌 Health Check:          http://localhost:$PORT/health"
   echo "-----------------------------------------------------------------"
   echo ""
-else
-  echo "💡 Tip: To expose to mobile 4G/5G players without same Wi-Fi, run:"
+  echo "💡 Tip: To expose to mobile 4G/5G players outside local Wi-Fi, run:"
   echo "        ./start.sh --tunnel"
 fi
 
