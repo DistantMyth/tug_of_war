@@ -15,6 +15,7 @@ import {
   Zap,
 } from "lucide-react";
 import { DisplayStage } from "../components/display/DisplayStage.js";
+import { CyberTitanCrest, SolarPhoenixCrest, ChaosWildcardCrest } from "../components/common/TeamBadges.js";
 import { socketClient } from "../socket/socketClient.js";
 import { useConnectionStore } from "../store/useConnectionStore.js";
 import { useGameStore } from "../store/useGameStore.js";
@@ -206,30 +207,42 @@ export const AdminPage: React.FC = () => {
 
           {/* Quick Metrics Bar */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800">
-              <div className="text-[10px] font-mono-condensed text-slate-400 uppercase">Total Participants</div>
-              <div className="text-2xl font-mono-condensed font-bold text-slate-100 mt-1">
+            <div className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 backdrop-blur-md">
+              <div className="text-[10px] font-mono-condensed text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                <Users className="w-3.5 h-3.5 text-slate-400" />
+                <span>Total Warriors</span>
+              </div>
+              <div className="text-2xl font-mono-condensed font-black text-slate-100 mt-1">
                 {counts.total} <span className="text-xs text-emerald-400 font-normal">({counts.online} online)</span>
               </div>
             </div>
 
-            <div className="p-4 rounded-xl bg-slate-900/80 border border-cyan-500/30">
-              <div className="text-[10px] font-mono-condensed text-cyan-400 uppercase">Team Cyan (Left)</div>
-              <div className="text-2xl font-mono-condensed font-bold text-slate-100 mt-1">
-                {counts.left} <span className="text-xs text-cyan-400 font-normal">({scores.left} taps)</span>
+            <div className="p-4 rounded-2xl bg-gradient-to-br from-cyan-950/40 to-slate-900/90 border-2 border-cyan-500/40 box-glow-cyan">
+              <div className="text-[10px] font-mono-condensed text-cyan-400 uppercase tracking-wider flex items-center justify-between">
+                <span>Team Cyan</span>
+                <CyberTitanCrest size={20} />
+              </div>
+              <div className="text-2xl font-mono-condensed font-black text-slate-100 mt-1">
+                {counts.left} <span className="text-xs text-cyan-400 font-normal">({scores.left.toLocaleString()} taps)</span>
               </div>
             </div>
 
-            <div className="p-4 rounded-xl bg-slate-900/80 border border-amber-500/30">
-              <div className="text-[10px] font-mono-condensed text-amber-400 uppercase">Team Amber (Right)</div>
-              <div className="text-2xl font-mono-condensed font-bold text-slate-100 mt-1">
-                {counts.right} <span className="text-xs text-amber-400 font-normal">({scores.right} taps)</span>
+            <div className="p-4 rounded-2xl bg-gradient-to-br from-amber-950/40 to-slate-900/90 border-2 border-amber-500/40 box-glow-amber">
+              <div className="text-[10px] font-mono-condensed text-amber-400 uppercase tracking-wider flex items-center justify-between">
+                <span>Team Amber</span>
+                <SolarPhoenixCrest size={20} />
+              </div>
+              <div className="text-2xl font-mono-condensed font-black text-slate-100 mt-1">
+                {counts.right} <span className="text-xs text-amber-400 font-normal">({scores.right.toLocaleString()} taps)</span>
               </div>
             </div>
 
-            <div className="p-4 rounded-xl bg-slate-900/80 border border-purple-500/30">
-              <div className="text-[10px] font-mono-condensed text-purple-400 uppercase">Chaos Player</div>
-              <div className="text-2xl font-mono-condensed font-bold text-slate-100 mt-1">
+            <div className="p-4 rounded-2xl bg-gradient-to-br from-purple-950/40 to-slate-900/90 border-2 border-purple-500/40 box-glow-violet">
+              <div className="text-[10px] font-mono-condensed text-purple-400 uppercase tracking-wider flex items-center justify-between">
+                <span>Chaos Hero</span>
+                <ChaosWildcardCrest size={20} />
+              </div>
+              <div className="text-2xl font-mono-condensed font-black text-slate-100 mt-1">
                 {counts.chaos}
               </div>
             </div>

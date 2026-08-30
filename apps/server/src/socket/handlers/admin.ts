@@ -292,4 +292,80 @@ export function registerAdminHandlers(
       }
     },
   );
+
+  // ==========================================
+  // EVENT: admin:emergency_stop
+  // ==========================================
+  socket.on("admin:emergency_stop" as any, async (payload: { adminToken?: string }, callback?: (ack: any) => void) => {
+    try {
+      if (!requireAdminAuth(payload?.adminToken)) {
+        const errAck = { ok: false, code: "UNAUTHORIZED" as ErrorCode, message: "Admin authorization required" };
+        if (callback) callback(errAck);
+        return;
+      }
+
+      const result = await orchestrator.emergencyStop();
+      if (callback) callback(result);
+    } catch (err) {
+      logger.error("admin_emergency_stop_error", { error: String(err) });
+      if (callback) callback({ ok: false, code: "VALIDATION", message: "Failed to execute emergency stop" });
+    }
+  });
+
+  // ==========================================
+  // EVENT: admin:end_event
+  // ==========================================
+  socket.on("admin:end_event" as any, async (payload: { adminToken?: string }, callback?: (ack: any) => void) => {
+    try {
+      if (!requireAdminAuth(payload?.adminToken)) {
+        const errAck = { ok: false, code: "UNAUTHORIZED" as ErrorCode, message: "Admin authorization required" };
+        if (callback) callback(errAck);
+        return;
+      }
+
+      const result = await orchestrator.endEvent();
+      if (callback) callback(result);
+    } catch (err) {
+      logger.error("admin_end_event_error", { error: String(err) });
+      if (callback) callback({ ok: false, code: "VALIDATION", message: "Failed to end event" });
+    }
+  });
+
+  // ==========================================
+  // EVENT: admin:reset_session
+  // ==========================================
+  socket.on("admin:reset_session" as any, async (payload: { adminToken?: string }, callback?: (ack: any) => void) => {
+    try {
+      if (!requireAdminAuth(payload?.adminToken)) {
+        const errAck = { ok: false, code: "UNAUTHORIZED" as ErrorCode, message: "Admin authorization required" };
+        if (callback) callback(errAck);
+        return;
+      }
+
+      const result = await orchestrator.resetSession();
+      if (callback) callback(result);
+    } catch (err) {
+      logger.error("admin_reset_session_error", { error: String(err) });
+      if (callback) callback({ ok: false, code: "VALIDATION", message: "Failed to reset session" });
+    }
+  });
+
+  // ==========================================
+  // EVENT: admin:shuffle_play
+  // ==========================================
+  socket.on("admin:shuffle_play" as any, async (payload: { durationMs?: number; adminToken?: string }, callback?: (ack: any) => void) => {
+    try {
+      if (!requireAdminAuth(payload?.adminToken)) {
+        const errAck = { ok: false, code: "UNAUTHORIZED" as ErrorCode, message: "Admin authorization required" };
+        if (callback) callback(errAck);
+        return;
+      }
+
+      const result = await orchestrator.openGame({ durationMs: payload?.durationMs });
+      if (callback) callback(result);
+    } catch (err) {
+      logger.error("admin_shuffle_play_error", { error: String(err) });
+      if (callback) callback({ ok: false, code: "VALIDATION", message: "Failed to shuffle play" });
+    }
+  });
 }

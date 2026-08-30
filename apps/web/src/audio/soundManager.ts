@@ -2,6 +2,27 @@ import { useUiStore } from "../store/useUiStore.js";
 
 class SoundManager {
   private ctx: AudioContext | null = null;
+  private hasInteractionListener: boolean = false;
+
+  constructor() {
+    if (typeof window !== "undefined") {
+      this.attachInteractionListener();
+    }
+  }
+
+  private attachInteractionListener(): void {
+    if (this.hasInteractionListener || typeof window === "undefined") return;
+    const unlock = () => {
+      if (this.ctx && this.ctx.state === "suspended") {
+        this.ctx.resume().catch(() => {});
+      }
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+    };
+    window.addEventListener("pointerdown", unlock, { once: true, passive: true });
+    window.addEventListener("keydown", unlock, { once: true, passive: true });
+    this.hasInteractionListener = true;
+  }
 
   private getContext(): AudioContext | null {
     if (typeof window === "undefined") return null;
@@ -41,6 +62,13 @@ class SoundManager {
       osc.connect(gain);
       gain.connect(ctx.destination);
 
+      osc.onended = () => {
+        try {
+          osc.disconnect();
+          gain.disconnect();
+        } catch {}
+      };
+
       osc.start(now);
       osc.stop(now + 0.06);
     } catch {}
@@ -64,6 +92,13 @@ class SoundManager {
 
       osc.connect(gain);
       gain.connect(ctx.destination);
+
+      osc.onended = () => {
+        try {
+          osc.disconnect();
+          gain.disconnect();
+        } catch {}
+      };
 
       osc.start(now);
       osc.stop(now + 0.15);
@@ -90,6 +125,13 @@ class SoundManager {
       osc.connect(gain);
       gain.connect(ctx.destination);
 
+      osc.onended = () => {
+        try {
+          osc.disconnect();
+          gain.disconnect();
+        } catch {}
+      };
+
       osc.start(now);
       osc.stop(now + 0.35);
     } catch {}
@@ -114,6 +156,13 @@ class SoundManager {
 
       osc.connect(gain);
       gain.connect(ctx.destination);
+
+      osc.onended = () => {
+        try {
+          osc.disconnect();
+          gain.disconnect();
+        } catch {}
+      };
 
       osc.start(now);
       osc.stop(now + 0.12);
@@ -141,6 +190,13 @@ class SoundManager {
         osc.connect(gain);
         gain.connect(ctx.destination);
 
+        osc.onended = () => {
+          try {
+            osc.disconnect();
+            gain.disconnect();
+          } catch {}
+        };
+
         osc.start(start);
         osc.stop(start + 0.2);
       });
@@ -166,6 +222,13 @@ class SoundManager {
 
       osc.connect(gain);
       gain.connect(ctx.destination);
+
+      osc.onended = () => {
+        try {
+          osc.disconnect();
+          gain.disconnect();
+        } catch {}
+      };
 
       osc.start(now);
       osc.stop(now + 0.25);
@@ -193,6 +256,13 @@ class SoundManager {
 
         osc.connect(gain);
         gain.connect(ctx.destination);
+
+        osc.onended = () => {
+          try {
+            osc.disconnect();
+            gain.disconnect();
+          } catch {}
+        };
 
         osc.start(start);
         osc.stop(start + 0.4);

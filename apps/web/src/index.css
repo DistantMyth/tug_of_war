@@ -4,28 +4,31 @@
   :root {
     --ink: #f0f6fc;
     --muted: #8b9bb4;
-    --stage: #04070d;
-    --stage-card: #090e17;
-    --stage-surface: #0e1524;
-    --line: #1c2738;
-    --line-bright: rgba(255, 255, 255, 0.12);
+    --stage: #050811;
+    --stage-card: #090e1a;
+    --stage-surface: #0f172a;
+    --line: #1c273e;
+    --line-bright: rgba(255, 255, 255, 0.15);
     
-    /* Team Cyan - Electric Neon Blue */
-    --cyan: #00f2fe;
-    --cyan-glow: rgba(0, 242, 254, 0.35);
-    --cyan-dark: #003840;
+    /* Team Cyber Azure - Electric Laser Cyan & Deep Azure */
+    --cyan: #00f0ff;
+    --cyan-glow: rgba(0, 240, 255, 0.45);
+    --cyan-dark: #003240;
+    --cyan-gradient: linear-gradient(135deg, #00f0ff 0%, #0284c7 100%);
     
-    /* Team Amber - Solar Flare Gold */
-    --amber: #ff9900;
-    --amber-glow: rgba(255, 153, 0, 0.35);
-    --amber-dark: #402600;
+    /* Team Solar Flare - Radiant Sunfire & Inferno Gold */
+    --amber: #ff6b00;
+    --amber-glow: rgba(255, 107, 0, 0.45);
+    --amber-dark: #421800;
+    --amber-gradient: linear-gradient(135deg, #ffd700 0%, #ff5500 100%);
     
-    /* Chaos Player - Royal Violet / Gold */
-    --violet: #a855f7;
-    --violet-glow: rgba(168, 85, 247, 0.4);
+    /* Chaos Player - Arcane Galactic Magenta & Solar Core */
+    --violet: #d946ef;
+    --violet-glow: rgba(217, 70, 239, 0.5);
     --gold: #fbbf24;
+    --chaos-gradient: linear-gradient(135deg, #f43f5e 0%, #a855f7 100%);
     
-    /* Accent & System */
+    /* System Accents */
     --emerald: #10b981;
     --crimson: #ef4444;
   }
@@ -62,96 +65,202 @@
 .bg-arena-stadium {
   background-color: var(--stage);
   background-image: 
-    radial-gradient(circle at 50% 15%, rgba(0, 242, 254, 0.08) 0%, transparent 60%),
-    radial-gradient(circle at 50% 85%, rgba(255, 153, 0, 0.08) 0%, transparent 60%),
-    linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
-  background-size: 100% 100%, 100% 100%, 32px 32px, 32px 32px;
+    radial-gradient(circle at 50% 10%, rgba(0, 240, 255, 0.12) 0%, transparent 60%),
+    radial-gradient(circle at 50% 90%, rgba(255, 107, 0, 0.12) 0%, transparent 60%),
+    linear-gradient(rgba(0, 240, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 107, 0, 0.03) 1px, transparent 1px);
+  background-size: 100% 100%, 100% 100%, 36px 36px, 36px 36px;
 }
 
 .bg-arena-broadcast {
-  background-color: #030509;
+  background-color: #03060c;
   background-image: 
-    radial-gradient(circle at 25% 45%, rgba(0, 242, 254, 0.12) 0%, transparent 50%),
-    radial-gradient(circle at 75% 45%, rgba(255, 153, 0, 0.12) 0%, transparent 50%),
-    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+    radial-gradient(circle at 20% 40%, rgba(0, 240, 255, 0.15) 0%, transparent 55%),
+    radial-gradient(circle at 80% 40%, rgba(255, 107, 0, 0.15) 0%, transparent 55%),
+    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
   background-size: 100% 100%, 100% 100%, 48px 48px, 48px 48px;
+}
+
+.bg-cyber-grid {
+  background-image: 
+    linear-gradient(to right, rgba(255,255,255,0.03) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255,255,255,0.03) 1px, transparent 1px);
+  background-size: 24px 24px;
 }
 
 /* Luminous Glow Effects */
 .box-glow-cyan {
-  box-shadow: 0 0 35px var(--cyan-glow), inset 0 0 20px rgba(0, 242, 254, 0.15);
+  box-shadow: 0 0 35px var(--cyan-glow), inset 0 0 20px rgba(0, 240, 255, 0.18);
 }
 
 .box-glow-amber {
-  box-shadow: 0 0 35px var(--amber-glow), inset 0 0 20px rgba(255, 153, 0, 0.15);
+  box-shadow: 0 0 35px var(--amber-glow), inset 0 0 20px rgba(255, 107, 0, 0.18);
 }
 
 .box-glow-violet {
-  box-shadow: 0 0 35px var(--violet-glow), inset 0 0 20px rgba(168, 85, 247, 0.15);
+  box-shadow: 0 0 35px var(--violet-glow), inset 0 0 20px rgba(217, 70, 239, 0.18);
 }
 
 .text-glow-cyan {
-  text-shadow: 0 0 24px rgba(0, 242, 254, 0.7), 0 0 48px rgba(0, 242, 254, 0.3);
+  text-shadow: 0 0 20px rgba(0, 240, 255, 0.8), 0 0 40px rgba(0, 240, 255, 0.4);
 }
 
 .text-glow-amber {
-  text-shadow: 0 0 24px rgba(255, 153, 0, 0.7), 0 0 48px rgba(255, 153, 0, 0.3);
+  text-shadow: 0 0 20px rgba(255, 107, 0, 0.8), 0 0 40px rgba(255, 107, 0, 0.4);
 }
 
 .text-glow-gold {
-  text-shadow: 0 0 24px rgba(251, 191, 36, 0.8);
+  text-shadow: 0 0 24px rgba(251, 191, 36, 0.85), 0 0 48px rgba(251, 191, 36, 0.4);
 }
 
 /* Animations */
 @keyframes tapPulse {
   0% { transform: scale(1); }
-  50% { transform: scale(0.94); }
+  50% { transform: scale(0.92); }
   100% { transform: scale(1); }
 }
 
 @keyframes tapRipple {
-  0% { transform: scale(0.85); opacity: 0.85; }
-  100% { transform: scale(1.6); opacity: 0; }
+  0% { transform: scale(0.85); opacity: 0.95; }
+  100% { transform: scale(1.7); opacity: 0; }
 }
 
 @keyframes cableVibrate {
   0%, 100% { transform: translateY(0); }
-  25% { transform: translateY(-1.5px); }
-  75% { transform: translateY(1.5px); }
+  25% { transform: translateY(-2px); }
+  75% { transform: translateY(2px); }
 }
 
 @keyframes hyperCableVibrate {
   0%, 100% { transform: translateY(0); }
-  20% { transform: translateY(-3px) scaleY(1.05); }
-  40% { transform: translateY(3px) scaleY(0.95); }
-  60% { transform: translateY(-2px); }
-  80% { transform: translateY(2px); }
+  20% { transform: translateY(-4px) scaleY(1.08); }
+  40% { transform: translateY(4px) scaleY(0.92); }
+  60% { transform: translateY(-3px); }
+  80% { transform: translateY(3px); }
 }
 
 @keyframes athleteHeaveLeft {
   0%, 100% { transform: translateX(0) rotate(-14deg); }
-  50% { transform: translateX(-8px) rotate(-19deg); }
+  50% { transform: translateX(-10px) rotate(-21deg); }
 }
 
 @keyframes athleteHeaveRight {
   0%, 100% { transform: translateX(0) rotate(14deg); }
-  50% { transform: translateX(8px) rotate(19deg); }
+  50% { transform: translateX(10px) rotate(21deg); }
 }
 
 @keyframes celebrationJump {
   0%, 100% { transform: translateY(0) scale(1); }
-  50% { transform: translateY(-14px) scale(1.05); }
+  50% { transform: translateY(-18px) scale(1.08); }
 }
 
-.animate-tap-pulse { animation: tapPulse 0.15s ease-out; }
-.animate-tap-ripple { animation: tapRipple 0.35s cubic-bezier(0.1, 0.9, 0.2, 1) forwards; }
-.animate-cable-vibrate { animation: cableVibrate 0.12s linear infinite; }
-.animate-cable-hyper { animation: hyperCableVibrate 0.08s linear infinite; }
-.animate-heave-left { animation: athleteHeaveLeft 0.38s ease-in-out infinite; }
-.animate-heave-right { animation: athleteHeaveRight 0.38s ease-in-out infinite; }
-.animate-celebrate { animation: celebrationJump 0.6s ease-in-out infinite; }
+@keyframes floatSlow {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+@keyframes spinSlow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes sparkFlash {
+  0%, 100% { opacity: 0.3; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1.15); }
+}
+
+@keyframes tickerMarquee {
+  0% { transform: translateX(100%); }
+  100% { transform: translateX(-100%); }
+}
+
+@keyframes shockwaveOuter {
+  0% {
+    transform: translate(-50%, -50%) scale(0.2);
+    opacity: 0.95;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(2.8);
+    opacity: 0;
+  }
+}
+
+@keyframes shockwaveInner {
+  0% {
+    transform: translate(-50%, -50%) scale(0.1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1.6);
+    opacity: 0;
+  }
+}
+
+@keyframes screenShake {
+  0%, 100% { transform: translate(0, 0) rotate(0deg); }
+  20% { transform: translate(-3px, 2px) rotate(-0.4deg); }
+  40% { transform: translate(3px, -2px) rotate(0.4deg); }
+  60% { transform: translate(-2px, -1px) rotate(-0.2deg); }
+  80% { transform: translate(2px, 1px) rotate(0.2deg); }
+}
+
+@keyframes fireBorderPulse {
+  0%, 100% {
+    border-color: #ff5500;
+    box-shadow: 0 0 15px rgba(255, 85, 0, 0.6), inset 0 0 10px rgba(255, 85, 0, 0.3);
+  }
+  50% {
+    border-color: #ffd700;
+    box-shadow: 0 0 25px rgba(255, 215, 0, 0.8), inset 0 0 18px rgba(255, 120, 0, 0.5);
+  }
+}
+
+@keyframes overdriveAura {
+  0%, 100% {
+    box-shadow: 0 0 30px rgba(217, 70, 239, 0.7), 0 0 60px rgba(0, 240, 255, 0.4), inset 0 0 20px rgba(251, 191, 36, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 45px rgba(255, 60, 0, 0.9), 0 0 80px rgba(217, 70, 239, 0.6), inset 0 0 30px rgba(255, 215, 0, 0.6);
+  }
+}
+
+@keyframes laserScan {
+  0% { top: 0%; opacity: 0.8; }
+  50% { top: 92%; opacity: 1; }
+  100% { top: 0%; opacity: 0.8; }
+}
+
+@keyframes flowArrow {
+  0% { transform: translateX(-6px); opacity: 0.3; }
+  50% { transform: translateX(6px); opacity: 1; }
+  100% { transform: translateX(-6px); opacity: 0.3; }
+}
+
+@keyframes sunburstSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.animate-tap-pulse { animation: tapPulse 0.12s ease-out; }
+.animate-tap-ripple { animation: tapRipple 0.4s cubic-bezier(0.1, 0.9, 0.2, 1) forwards; }
+.animate-cable-vibrate { animation: cableVibrate 0.1s linear infinite; }
+.animate-cable-hyper { animation: hyperCableVibrate 0.07s linear infinite; }
+.animate-heave-left { animation: athleteHeaveLeft 0.36s ease-in-out infinite; }
+.animate-heave-right { animation: athleteHeaveRight 0.36s ease-in-out infinite; }
+.animate-celebrate { animation: celebrationJump 0.55s ease-in-out infinite; }
+.animate-float-slow { animation: floatSlow 3s ease-in-out infinite; }
+.animate-spin-slow { animation: spinSlow 20s linear infinite; }
+.animate-spark-flash { animation: sparkFlash 1s ease-in-out infinite; }
+.animate-ticker { animation: tickerMarquee 22s linear infinite; }
+.animate-shockwave-outer { animation: shockwaveOuter 0.5s cubic-bezier(0.1, 0.9, 0.3, 1) forwards; }
+.animate-shockwave-inner { animation: shockwaveInner 0.35s cubic-bezier(0.1, 0.9, 0.3, 1) forwards; }
+.animate-screen-shake { animation: screenShake 0.15s ease-in-out; }
+.animate-fire-border { animation: fireBorderPulse 1s ease-in-out infinite; }
+.animate-overdrive-aura { animation: overdriveAura 0.8s ease-in-out infinite; }
+.animate-laser-scan { animation: laserScan 2.5s ease-in-out infinite; }
+.animate-flow-arrow { animation: flowArrow 1.2s ease-in-out infinite; }
+.animate-sunburst { animation: sunburstSpin 40s linear infinite; }
 
 /* Responsive Utility */
 @media (prefers-reduced-motion: reduce) {

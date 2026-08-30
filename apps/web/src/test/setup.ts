@@ -1,6 +1,34 @@
 import "@testing-library/jest-dom";
 import { vi } from "vitest";
 
+// Robust localStorage mock
+const storageMap = new Map<string, string>();
+const localStorageMock = {
+  getItem: vi.fn((key: string) => storageMap.get(key) ?? null),
+  setItem: vi.fn((key: string, value: string) => {
+    storageMap.set(key, String(value));
+  }),
+  removeItem: vi.fn((key: string) => {
+    storageMap.delete(key);
+  }),
+  clear: vi.fn(() => {
+    storageMap.clear();
+  }),
+  key: vi.fn((index: number) => Array.from(storageMap.keys())[index] ?? null),
+  get length() {
+    return storageMap.size;
+  },
+};
+
+Object.defineProperty(window, "localStorage", {
+  value: localStorageMock,
+  writable: true,
+});
+Object.defineProperty(globalThis, "localStorage", {
+  value: localStorageMock,
+  writable: true,
+});
+
 // Mock canvas 2d context for canvas-confetti
 HTMLCanvasElement.prototype.getContext = () =>
   ({
@@ -40,3 +68,4 @@ Object.defineProperty(window, "matchMedia", {
     dispatchEvent: () => false,
   }),
 });
+

@@ -402,4 +402,66 @@ describe("GameOrchestrator — Full Lifecycle & Team Balancing Orchestration", (
       },
     );
   });
+
+  // ==================================================
+  // 9. EMERGENCY STOP & SESSION RESET
+  // ==================================================
+  describe("Emergency Stop & Reset Lifecycle", () => {
+    it("successfully performs emergencyStop from RUNNING state", async () => {
+      const open = await orchestrator.openGame();
+      const gameId = (open as any).data.gameId;
+
+      await repo.addOrUpdatePlayer(gameId, { playerId: "p1", label: "P1", team: "left", wildcard: false, status: "online", joinedAt: 10, lastSeen: 10 });
+      await repo.addOrUpdatePlayer(gameId, { playerId: "p2", label: "P2", team: "right", wildcard: false, status: "online", joinedAt: 20, lastSeen: 20 });
+
+      await orchestrator.lockGame();
+      await orchestrator.completeCountdown(gameId);
+
+      const runningGame = await repo.getGame(gameId);
+      expect((runningGame as any).value.phase).toBe("RUNNING");
+
+      const stopRes = await orchestrator.emergencyStop();
+      expect(stopRes.ok).toBe(true);
+
+      const stoppedGame = await repo.getGame(gameId);
+      expect((stoppedGame as any).value.phase).toBe("WAITING");
+      expect((stoppedGame as any).value.joinAllowed).toBe(false);
+    });
+
+    it("successfully performs endEvent from FINISHED state", async () => {
+      const open = await orchestrator.openGame();
+      const gameId = (open as any).data.gameId;
+
+      await repo.addOrUpdatePlayer(gameId, { playerId: "p1", label: "P1", team: "left", wildcard: false, status: "online", joinedAt: 10, lastSeen: 10 });
+      await repo.addOrUpdatePlayer(gameId, { playerId: "p2", label: "P2", team: "right", wildcard: false, status: "online", joinedAt: 20, lastSeen: 20 });
+
+      await orchestrator.lockGame();
+      await orchestrator.completeCountdown(gameId);
+      await orchestrator.finishGame("timer");
+
+      const finishedGame = await repo.getGame(gameId);
+      expect((finishedGame as any).value.phase).toBe("FINISHED");
+
+      const endRes = await orchestrator.endEvent();
+      expect(endRes.ok).toBe(true);
+
+      const endedGame = await repo.getGame(gameId);
+      expect((endedGame as any).value.phase).toBe("WAITING");
+    });
+
+    it("successfully resets session with resetSession", async () => {
+      const open = await orchestrator.openGame();
+      expect(open.ok).toBe(true);
+
+      const currentGameId = await repo.getCurrentGameId();
+      expect(currentGameId).toBeTruthy();
+
+      const resetRes = await orchestrator.resetSession();
+      expect(resetRes.ok).toBe(true);
+
+      const afterResetGameId = await repo.getCurrentGameId();
+      expect(afterResetGameId).toBeNull();
+    });
+  });
 });
+

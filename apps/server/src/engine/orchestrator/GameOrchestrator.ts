@@ -1443,7 +1443,141 @@ export class GameOrchestrator {
   }
 
   // ==========================================
-  // 13. PROCESS RESTART RECOVERY
+  // 13. EMERGENCY STOP & EVENT RESET
+  // ==========================================
+
+  async emergencyStop(): Promise<OrchestratorResult<void>> {
+    try {
+      const gameId = await this.repository.getCurrentGameId();
+      if (!gameId) {
+        return { ok: false, code: "GAME_NOT_FOUND", message: "No active game session" };
+      }
+
+      this.timerManager.cancel(gameId);
+      this.scoreBroadcaster.reset(gameId);
+      this.roundExtensions.delete(gameId);
+      this.lockedComposition.delete(gameId);
+
+      const now = Date.now();
+      await this.repository.updateGame(gameId, {
+        phase: "WAITING",
+        joinAllowed: false,
+        winner: null,
+        startTime: null,
+        endTime: null,
+        pausedAt: null,
+        pauseAccumMs: 0,
+        countdownEndsAt: null,
+      });
+      await this.repository.resetScores(gameId);
+
+      logger.info("emergency_stop_executed", { gameId });
+
+      this.persistenceService?.persistAuditEvent({
+        sessionId: gameId,
+        eventType: "PHASE_CHANGE",
+        data: { phase: "WAITING", reason: "emergency" },
+        timestamp: now,
+      });
+
+      if (this.emitter) {
+        this.emitter.emitPhase(gameId, "WAITING", now);
+        this.emitter.emitScore(gameId, { left: 0, right: 0, seq: 0, at: now });
+        this.emitter.emitSync(gameId);
+      }
+
+      return { ok: true, data: undefined };
+    } catch (err) {
+      logger.error("emergency_stop_error", { error: String(err) });
+      return { ok: false, code: "VALIDATION", message: "Failed to execute emergency stop" };
+    }
+  }
+
+  async endEvent(): Promise<OrchestratorResult<void>> {
+    try {
+      const gameId = await this.repository.getCurrentGameId();
+      if (!gameId) {
+        return { ok: false, code: "GAME_NOT_FOUND", message: "No active game session" };
+      }
+
+      this.timerManager.cancel(gameId);
+      this.scoreBroadcaster.reset(gameId);
+      this.roundExtensions.delete(gameId);
+      this.lockedComposition.delete(gameId);
+
+      const now = Date.now();
+      await this.repository.updateGame(gameId, {
+        phase: "WAITING",
+        joinAllowed: false,
+        winner: null,
+        startTime: null,
+        endTime: null,
+        pausedAt: null,
+        pauseAccumMs: 0,
+        countdownEndsAt: null,
+      });
+      await this.repository.resetScores(gameId);
+
+      logger.info("event_ended", { gameId });
+
+      this.persistenceService?.persistAuditEvent({
+        sessionId: gameId,
+        eventType: "PHASE_CHANGE",
+        data: { phase: "WAITING", reason: "end_event" },
+        timestamp: now,
+      });
+
+      if (this.emitter) {
+        this.emitter.emitPhase(gameId, "WAITING", now);
+        this.emitter.emitScore(gameId, { left: 0, right: 0, seq: 0, at: now });
+        this.emitter.emitSync(gameId);
+      }
+
+      return { ok: true, data: undefined };
+    } catch (err) {
+      logger.error("end_event_error", { error: String(err) });
+      return { ok: false, code: "VALIDATION", message: "Failed to end event" };
+    }
+  }
+
+  async resetSession(): Promise<OrchestratorResult<void>> {
+    try {
+      const gameId = await this.repository.getCurrentGameId();
+      if (gameId) {
+        this.timerManager.cancel(gameId);
+        this.scoreBroadcaster.reset(gameId);
+        this.roundExtensions.delete(gameId);
+        this.lockedComposition.delete(gameId);
+
+        const now = Date.now();
+        await this.repository.updateGame(gameId, {
+          phase: "WAITING",
+          joinAllowed: false,
+          winner: null,
+          startTime: null,
+          endTime: null,
+          pausedAt: null,
+          pauseAccumMs: 0,
+          countdownEndsAt: null,
+        });
+        await this.repository.resetScores(gameId);
+        await this.repository.clearCurrentGameId();
+
+        if (this.emitter) {
+          this.emitter.emitPhase(gameId, "WAITING", now);
+          this.emitter.emitScore(gameId, { left: 0, right: 0, seq: 0, at: now });
+          this.emitter.emitSync(gameId);
+        }
+      }
+      return { ok: true, data: undefined };
+    } catch (err) {
+      logger.error("reset_session_error", { error: String(err) });
+      return { ok: false, code: "VALIDATION", message: "Failed to reset session" };
+    }
+  }
+
+  // ==========================================
+  // 14. PROCESS RESTART RECOVERY
   // ==========================================
 
   async recoverProcessState(): Promise<void> {

@@ -152,6 +152,7 @@ function endEvent(state: GameState): GameTransitionResult {
     "WAITING",
     waitingReset(state),
     [{ type: "GAME_RESET", reason: "end_event" }],
+    true,
   );
 }
 

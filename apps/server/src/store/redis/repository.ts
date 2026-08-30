@@ -181,12 +181,14 @@ export class RedisGameRepository {
       await this.redis.sadd(RedisKeys.teamRight(gameId), player.playerId);
       await this.redis.srem(RedisKeys.teamLeft(gameId), player.playerId);
       await this.redis.srem(RedisKeys.teamWild(gameId), player.playerId);
-    } else if (player.wildcard || player.team === null) {
-      if (player.wildcard) {
-        await this.redis.sadd(RedisKeys.teamWild(gameId), player.playerId);
-        await this.redis.srem(RedisKeys.teamLeft(gameId), player.playerId);
-        await this.redis.srem(RedisKeys.teamRight(gameId), player.playerId);
-      }
+    } else if (player.wildcard) {
+      await this.redis.sadd(RedisKeys.teamWild(gameId), player.playerId);
+      await this.redis.srem(RedisKeys.teamLeft(gameId), player.playerId);
+      await this.redis.srem(RedisKeys.teamRight(gameId), player.playerId);
+    } else {
+      await this.redis.srem(RedisKeys.teamLeft(gameId), player.playerId);
+      await this.redis.srem(RedisKeys.teamRight(gameId), player.playerId);
+      await this.redis.srem(RedisKeys.teamWild(gameId), player.playerId);
     }
 
     if (player.status === "online") {

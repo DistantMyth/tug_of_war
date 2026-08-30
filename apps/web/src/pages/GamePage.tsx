@@ -8,6 +8,10 @@ import { useSessionStore } from "../store/useSessionStore.js";
 import { useUiStore } from "../store/useUiStore.js";
 import { BattleHud } from "../components/game/BattleHud.js";
 import { RopeArena } from "../components/game/RopeArena.js";
+import { TapComboOverlay, getComboTier } from "../components/game/TapComboOverlay.js";
+import type { TapEvent } from "../components/game/TapComboOverlay.js";
+import { CyberTitanCrest, SolarPhoenixCrest } from "../components/common/TeamBadges.js";
+import { soundManager } from "../audio/soundManager.js";
 
 export const GamePage: React.FC = () => {
   const navigate = useNavigate();
@@ -18,10 +22,25 @@ export const GamePage: React.FC = () => {
 
   const [tapRipple, setTapRipple] = useState<boolean>(false);
   const [tapStreak, setTapStreak] = useState<number>(0);
+  const [lastTapEvent, setLastTapEvent] = useState<TapEvent | null>(null);
+  const [isScreenShaking, setIsScreenShaking] = useState<boolean>(false);
   const [actionLoading, setActionLoading] = useState<boolean>(false);
   const [remainingTime, setRemainingTime] = useState<string>("00:30.0");
   const [isLastFiveSec, setIsLastFiveSec] = useState<boolean>(false);
+  
   const streakTimerRef = useRef<number | null>(null);
+  const shakeTimerRef = useRef<number | null>(null);
+  const rippleTimerRef = useRef<number | null>(null);
+  const tapButtonRef = useRef<HTMLButtonElement | null>(null);
+
+  // Clear timers on unmount
+  useEffect(() => {
+    return () => {
+      if (rippleTimerRef.current) window.clearTimeout(rippleTimerRef.current);
+      if (streakTimerRef.current) window.clearTimeout(streakTimerRef.current);
+      if (shakeTimerRef.current) window.clearTimeout(shakeTimerRef.current);
+    };
+  }, []);
 
   // Authentication & Socket Connection
   useEffect(() => {
@@ -34,6 +53,8 @@ export const GamePage: React.FC = () => {
 
   // High-Precision RAF Timer Loop based on authoritative server clock
   useEffect(() => {
+    if (phase !== "RUNNING" && phase !== "PAUSED") return;
+
     let frameId: number;
     const tick = () => {
       const now = Date.now();
@@ -51,10 +72,11 @@ export const GamePage: React.FC = () => {
       const minutes = Math.floor(sec / 60);
       const seconds = sec % 60;
 
-      setRemainingTime(
-        `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}.${centis}`,
-      );
-      setIsLastFiveSec(remainingMs <= 5000 && remainingMs > 0 && phase === "RUNNING");
+      const formatted = `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}.${centis}`;
+      setRemainingTime((prev) => (prev === formatted ? prev : formatted));
+
+      const lastFive = remainingMs <= 5000 && remainingMs > 0 && phase === "RUNNING";
+      setIsLastFiveSec((prev) => (prev === lastFive ? prev : lastFive));
 
       frameId = requestAnimationFrame(tick);
     };
@@ -63,22 +85,61 @@ export const GamePage: React.FC = () => {
     return () => cancelAnimationFrame(frameId);
   }, [timing.endTime, timing.pausedAt, phase]);
 
-  // Handle Tap Action
-  const handleTap = async () => {
+  // Handle Tap Action with coordinates and combo progression
+  const handleTap = async (
+    e?: React.MouseEvent<HTMLButtonElement> | React.TouchEvent<HTMLButtonElement>,
+  ) => {
     if (phase !== "RUNNING" || chaos || !team) return;
 
-    // Haptic pulse
+    // Haptic pulse feedback
     if (typeof navigator !== "undefined" && navigator.vibrate) {
       navigator.vibrate(15);
     }
 
+    // Audio SFX
+    soundManager.playTap();
+
     setTapRipple(true);
-    window.setTimeout(() => setTapRipple(false), 200);
+    if (rippleTimerRef.current) window.clearTimeout(rippleTimerRef.current);
+    rippleTimerRef.current = window.setTimeout(() => setTapRipple(false), 200);
 
     // Client-side visual pull streak (does not affect server score)
-    setTapStreak((prev) => Math.min(prev + 1, 99));
+    const newStreak = Math.min(tapStreak + 1, 99);
+    setTapStreak(newStreak);
     if (streakTimerRef.current) window.clearTimeout(streakTimerRef.current);
     streakTimerRef.current = window.setTimeout(() => setTapStreak(0), 1200);
+
+    // Compute coordinate for floating chips & shockwaves
+    let tapX = typeof window !== "undefined" ? window.innerWidth / 2 : 200;
+    let tapY = typeof window !== "undefined" ? window.innerHeight * 0.75 : 400;
+
+    if (e && "clientX" in e && e.clientX && e.clientY) {
+      tapX = e.clientX;
+      tapY = e.clientY;
+    } else if (e && "touches" in e && e.touches && e.touches[0]) {
+      tapX = e.touches[0].clientX;
+      tapY = e.touches[0].clientY;
+    } else if (tapButtonRef.current) {
+      const rect = tapButtonRef.current.getBoundingClientRect();
+      tapX = rect.left + rect.width / 2 + (Math.random() - 0.5) * (rect.width * 0.3);
+      tapY = rect.top + rect.height / 2 + (Math.random() - 0.5) * (rect.height * 0.2);
+    }
+
+    setLastTapEvent({
+      id: Date.now() + Math.random(),
+      x: tapX,
+      y: tapY,
+      streak: newStreak,
+      team,
+      timestamp: Date.now(),
+    });
+
+    // Screen shake impulse on Overdrive (20+)
+    if (newStreak >= 20) {
+      setIsScreenShaking(true);
+      if (shakeTimerRef.current) window.clearTimeout(shakeTimerRef.current);
+      shakeTimerRef.current = window.setTimeout(() => setIsScreenShaking(false), 160);
+    }
 
     const res = await socketClient.playerTap();
     if (!res.ok && res.code === "RATE_LIMITED") {
@@ -128,9 +189,17 @@ export const GamePage: React.FC = () => {
     (isRight && (balancePlan?.remainingRightToLeft ?? 0) > 0);
 
   const teamAccentColor = isLeft ? "var(--cyan)" : isRight ? "var(--amber)" : "var(--muted)";
+  const streakTier = getComboTier(tapStreak);
 
   return (
-    <main className="h-[100dvh] max-h-[100dvh] w-full bg-arena-stadium text-[var(--ink)] flex flex-col justify-between overflow-hidden select-none touch-manipulation">
+    <main
+      className={`h-[100dvh] max-h-[100dvh] w-full bg-arena-stadium text-[var(--ink)] flex flex-col justify-between overflow-hidden select-none touch-manipulation relative ${
+        isScreenShaking ? "animate-screen-shake" : ""
+      }`}
+    >
+      {/* Floating Combo & Shockwave FX Overlay */}
+      <TapComboOverlay lastTap={lastTapEvent} />
+
       {/* ================================================== */}
       {/* TOP STADIUM HUD BAR */}
       {/* ================================================== */}
@@ -209,48 +278,72 @@ export const GamePage: React.FC = () => {
               </p>
             </div>
 
-            {/* Team Portals */}
-            <div className="grid grid-cols-2 gap-3 w-full">
-              {/* Cyan Button */}
+            {/* Upgraded Team Portals with Badges & Glowing States */}
+            <div className="grid grid-cols-2 gap-3.5 w-full">
+              {/* Cyan Button with Cyber Titan Crest */}
               <button
                 disabled={actionLoading}
                 onClick={() => handleChooseTeam("left")}
-                className={`p-4 md:p-5 rounded-2xl border flex flex-col items-center text-center transition-all ${
+                className={`p-4 md:p-5 rounded-2xl border flex flex-col items-center text-center transition-all duration-150 cursor-pointer active:scale-95 relative overflow-hidden group ${
                   isLeft
-                    ? "bg-gradient-to-b from-[#003840] to-[var(--stage-card)] border-[var(--cyan)] box-glow-cyan scale-[1.02]"
-                    : "bg-[var(--stage-card)] border-[var(--line)] hover:border-[var(--cyan)]/50"
+                    ? "bg-gradient-to-b from-[#003840] via-[#08202a] to-[var(--stage-card)] border-[var(--cyan)] box-glow-cyan scale-[1.02]"
+                    : "bg-[var(--stage-card)] border-[var(--line)] hover:border-[var(--cyan)]/60 hover:bg-[#00222a]/40"
                 }`}
               >
+                <div className="mb-2 transition-transform duration-200 group-hover:scale-110">
+                  <CyberTitanCrest size={52} className={isLeft ? "drop-shadow-[0_0_15px_rgba(0,240,255,0.8)]" : "opacity-80"} />
+                </div>
+                <span className="text-[10px] font-mono-condensed tracking-widest text-cyan-400 font-bold uppercase">
+                  CYBER TITANS
+                </span>
                 <span className="text-xs font-mono-condensed font-bold uppercase tracking-wider text-[var(--cyan)]">
                   CYAN
                 </span>
                 <strong className="text-4xl font-mono-condensed font-black text-white my-1">
                   {counts.left}
                 </strong>
-                <small className="text-[10px] font-mono-condensed text-slate-400">
+                <span
+                  className={`text-[10px] font-mono-condensed px-2.5 py-0.5 rounded-full border transition-colors ${
+                    isLeft
+                      ? "bg-cyan-950 border-cyan-400 text-cyan-300 font-bold"
+                      : "border-slate-700 text-slate-400"
+                  }`}
+                >
                   {isLeft ? "YOUR TEAM ✓" : "JOIN TEAM"}
-                </small>
+                </span>
               </button>
 
-              {/* Amber Button */}
+              {/* Amber Button with Solar Phoenix Crest */}
               <button
                 disabled={actionLoading}
                 onClick={() => handleChooseTeam("right")}
-                className={`p-4 md:p-5 rounded-2xl border flex flex-col items-center text-center transition-all ${
+                className={`p-4 md:p-5 rounded-2xl border flex flex-col items-center text-center transition-all duration-150 cursor-pointer active:scale-95 relative overflow-hidden group ${
                   isRight
-                    ? "bg-gradient-to-b from-[#402600] to-[var(--stage-card)] border-[var(--amber)] box-glow-amber scale-[1.02]"
-                    : "bg-[var(--stage-card)] border-[var(--line)] hover:border-[var(--amber)]/50"
+                    ? "bg-gradient-to-b from-[#402600] via-[#241400] to-[var(--stage-card)] border-[var(--amber)] box-glow-amber scale-[1.02]"
+                    : "bg-[var(--stage-card)] border-[var(--line)] hover:border-[var(--amber)]/60 hover:bg-[#2b1800]/40"
                 }`}
               >
+                <div className="mb-2 transition-transform duration-200 group-hover:scale-110">
+                  <SolarPhoenixCrest size={52} className={isRight ? "drop-shadow-[0_0_15px_rgba(255,107,0,0.8)]" : "opacity-80"} />
+                </div>
+                <span className="text-[10px] font-mono-condensed tracking-widest text-amber-400 font-bold uppercase">
+                  SOLAR PHOENIX
+                </span>
                 <span className="text-xs font-mono-condensed font-bold uppercase tracking-wider text-[var(--amber)]">
                   AMBER
                 </span>
                 <strong className="text-4xl font-mono-condensed font-black text-white my-1">
                   {counts.right}
                 </strong>
-                <small className="text-[10px] font-mono-condensed text-slate-400">
+                <span
+                  className={`text-[10px] font-mono-condensed px-2.5 py-0.5 rounded-full border transition-colors ${
+                    isRight
+                      ? "bg-amber-950 border-amber-400 text-amber-300 font-bold"
+                      : "border-slate-700 text-slate-400"
+                  }`}
+                >
                   {isRight ? "YOUR TEAM ✓" : "JOIN TEAM"}
-                </small>
+                </span>
               </button>
             </div>
 
@@ -259,9 +352,9 @@ export const GamePage: React.FC = () => {
               <button
                 disabled={actionLoading}
                 onClick={handleSwitchTeam}
-                className="w-full py-3.5 px-4 rounded-xl bg-[var(--stage-card)] hover:bg-[var(--stage-surface)] border border-[var(--line)] text-xs font-mono-condensed uppercase tracking-wider flex items-center justify-center gap-2 text-slate-300 transition-all"
+                className="w-full py-3.5 px-4 rounded-xl bg-[var(--stage-card)] hover:bg-[var(--stage-surface)] border border-[var(--line)] text-xs font-mono-condensed uppercase tracking-wider flex items-center justify-center gap-2 text-slate-300 transition-all cursor-pointer active:scale-98"
               >
-                <ArrowRightLeft className="w-4 h-4 text-amber-400" />
+                <ArrowRightLeft className="w-4 h-4 text-amber-400 animate-pulse" />
                 Switch to {isLeft ? "Amber" : "Cyan"}
               </button>
             )}
@@ -269,8 +362,8 @@ export const GamePage: React.FC = () => {
         ) : phase === "BALANCING" || phase === "LOCKING" ? (
           /* 3. BALANCING VIEW */
           <section className="my-auto w-full flex flex-col items-center gap-5 text-center">
-            <div className="w-14 h-14 rounded-2xl bg-amber-500/20 border border-amber-500/40 text-[var(--amber)] flex items-center justify-center animate-pulse">
-              <ArrowRightLeft className="w-7 h-7" />
+            <div className="w-16 h-16 rounded-2xl bg-amber-500/20 border border-amber-500/40 text-[var(--amber)] flex items-center justify-center animate-pulse shadow-[0_0_20px_rgba(245,158,11,0.3)]">
+              <ArrowRightLeft className="w-8 h-8 animate-bounce" />
             </div>
             <div className="space-y-1">
               <h1 className="font-display text-3xl uppercase text-[var(--amber)] tracking-wide">
@@ -283,13 +376,15 @@ export const GamePage: React.FC = () => {
               </p>
             </div>
 
-            {/* Roster Balance Comparison */}
-            <div className="grid grid-cols-2 gap-3 w-full max-w-xs">
-              <div className="p-3 rounded-xl bg-[var(--stage-card)] border border-[var(--line)]">
+            {/* Roster Balance Comparison with Badges */}
+            <div className="grid grid-cols-2 gap-3.5 w-full max-w-xs">
+              <div className="p-3.5 rounded-xl bg-[var(--stage-card)] border border-[var(--cyan)]/40 flex flex-col items-center">
+                <CyberTitanCrest size={28} className="mb-1" />
                 <span className="text-[10px] font-mono-condensed text-[var(--cyan)] font-bold">CYAN</span>
                 <strong className="block text-2xl font-mono-condensed text-white">{counts.left}</strong>
               </div>
-              <div className="p-3 rounded-xl bg-[var(--stage-card)] border border-[var(--line)]">
+              <div className="p-3.5 rounded-xl bg-[var(--stage-card)] border border-[var(--amber)]/40 flex flex-col items-center">
+                <SolarPhoenixCrest size={28} className="mb-1" />
                 <span className="text-[10px] font-mono-condensed text-[var(--amber)] font-bold">AMBER</span>
                 <strong className="block text-2xl font-mono-condensed text-white">{counts.right}</strong>
               </div>
@@ -299,9 +394,10 @@ export const GamePage: React.FC = () => {
               <button
                 disabled={actionLoading}
                 onClick={handleVolunteer}
-                className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-amber-500 to-amber-400 text-slate-950 font-display text-lg uppercase tracking-wider shadow-[0_0_30px_rgba(245,158,11,0.5)] transition-all animate-bounce"
+                className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-400 text-slate-950 font-display text-lg uppercase tracking-wider shadow-[0_0_30px_rgba(245,158,11,0.6)] hover:shadow-[0_0_45px_rgba(245,158,11,0.9)] active:scale-95 transition-all animate-bounce flex items-center justify-center gap-2 cursor-pointer font-black"
               >
-                Volunteer and switch ⚡
+                <Zap className="w-5 h-5 text-slate-950" />
+                <span>Volunteer and switch ⚡</span>
               </button>
             ) : (
               <div className="p-3.5 rounded-xl bg-[var(--stage-card)] border border-[var(--line)] text-xs font-mono-condensed text-slate-400">
@@ -347,46 +443,182 @@ export const GamePage: React.FC = () => {
               />
             </div>
 
-            {/* Personal Pull Cadence / Streak Gauge */}
-            <div className="flex items-center gap-2 text-[10px] font-mono-condensed text-[var(--muted)]">
-              <Zap className="w-3.5 h-3.5 text-amber-400" />
-              <span>PULL CADENCE:</span>
-              <strong className="text-white">{tapStreak > 0 ? `${tapStreak} TAPS/BURST` : "READY"}</strong>
+            {/* Dynamic Combo Streak Gauge */}
+            <div className="w-full max-w-sm flex flex-col gap-1.5 px-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  {streakTier === "overdrive" ? (
+                    <span className="text-xs font-mono-condensed font-black text-fuchsia-400 animate-pulse flex items-center gap-1">
+                      <Sparkles className="w-3.5 h-3.5 text-yellow-300" />
+                      OVERDRIVE MODE
+                    </span>
+                  ) : streakTier === "turbo" ? (
+                    <span className="text-xs font-mono-condensed font-black text-amber-400 flex items-center gap-1">
+                      <Flame className="w-3.5 h-3.5 text-orange-500 animate-bounce" />
+                      TURBO CHARGE
+                    </span>
+                  ) : streakTier === "combo" ? (
+                    <span className="text-xs font-mono-condensed font-black text-cyan-300 flex items-center gap-1">
+                      <Zap className="w-3.5 h-3.5 text-cyan-400" />
+                      COMBO ACTIVE
+                    </span>
+                  ) : (
+                    <span className="text-xs font-mono-condensed text-[var(--muted)] flex items-center gap-1">
+                      <Zap className="w-3.5 h-3.5 text-slate-500" />
+                      PULL CADENCE:
+                    </span>
+                  )}
+                </div>
+
+                {/* Tier Badge & Multiplier */}
+                <div
+                  className={`px-2.5 py-0.5 rounded-full text-[11px] font-mono-condensed font-black tracking-wider border transition-all ${
+                    streakTier === "overdrive"
+                      ? "bg-gradient-to-r from-red-600 to-fuchsia-600 text-yellow-200 border-yellow-300 animate-overdrive-aura"
+                      : streakTier === "turbo"
+                      ? "bg-orange-950 text-amber-300 border-orange-500 animate-fire-border"
+                      : streakTier === "combo"
+                      ? isLeft
+                        ? "bg-cyan-950 text-cyan-300 border-cyan-400 box-glow-cyan"
+                        : "bg-amber-950 text-amber-300 border-amber-400 box-glow-amber"
+                      : "bg-[var(--stage-surface)] text-slate-400 border-[var(--line)]"
+                  }`}
+                >
+                  {streakTier === "overdrive"
+                    ? "💥 OVERDRIVE x5"
+                    : streakTier === "turbo"
+                    ? "🔥 TURBO x3"
+                    : streakTier === "combo"
+                    ? "⚡ COMBO x2"
+                    : "NORMAL PULL"}
+                </div>
+              </div>
+
+              {/* Progress Fill Meter */}
+              <div className="w-full h-2 rounded-full bg-[var(--stage-surface)] border border-[var(--line)] overflow-hidden relative">
+                <div
+                  className={`h-full transition-all duration-150 rounded-full ${
+                    streakTier === "overdrive"
+                      ? "bg-gradient-to-r from-red-500 via-yellow-400 to-fuchsia-500 animate-pulse"
+                      : streakTier === "turbo"
+                      ? "bg-gradient-to-r from-orange-500 to-amber-400 animate-fire-border"
+                      : streakTier === "combo"
+                      ? isLeft
+                        ? "bg-gradient-to-r from-cyan-400 to-sky-300"
+                        : "bg-gradient-to-r from-amber-400 to-orange-300"
+                      : isLeft
+                      ? "bg-cyan-500/80"
+                      : "bg-amber-500/80"
+                  }`}
+                  style={{ width: `${Math.min(100, (tapStreak / 20) * 100)}%` }}
+                />
+              </div>
+
+              <div className="flex justify-between items-center text-[10px] font-mono-condensed text-slate-400 px-0.5">
+                <strong className="text-white">{tapStreak > 0 ? `${tapStreak} TAPS/BURST` : "READY"}</strong>
+                <span className="text-[10px] text-slate-400 font-mono-condensed">
+                  {streakTier === "overdrive" ? "MAX POWER" : `${Math.max(1, 20 - tapStreak)} TAPS TO OVERDRIVE`}
+                </span>
+              </div>
             </div>
 
-            {/* Bottom Giant Interactive TAP Control */}
+            {/* Bottom Giant Interactive TAP Control with Radiant Borders & Badges */}
             <div className="w-full relative flex items-center justify-center pb-2">
               {tapRipple && (
                 <div
                   className={`absolute inset-0 rounded-3xl animate-tap-ripple ${
-                    isLeft ? "bg-[var(--cyan)]/40" : "bg-[var(--amber)]/40"
+                    streakTier === "overdrive"
+                      ? "bg-fuchsia-500/40 shadow-[0_0_40px_rgba(217,70,239,0.8)]"
+                      : streakTier === "turbo"
+                      ? "bg-orange-500/40 shadow-[0_0_30px_rgba(249,115,22,0.8)]"
+                      : isLeft
+                      ? "bg-[var(--cyan)]/40"
+                      : "bg-[var(--amber)]/40"
                   }`}
                 />
               )}
 
               <button
+                ref={tapButtonRef}
                 disabled={phase === "PAUSED"}
                 onClick={handleTap}
                 aria-label={`Tap for team ${team}`}
-                className={`relative w-full max-w-sm h-24 md:h-28 rounded-3xl border-4 flex flex-col items-center justify-center font-display text-3xl md:text-4xl uppercase tracking-wider transition-all duration-75 active:scale-95 cursor-pointer ${
+                className={`relative w-full max-w-sm h-24 md:h-28 rounded-3xl border-4 flex items-center justify-between px-5 md:px-6 font-display uppercase tracking-wider transition-all duration-75 active:scale-[0.94] cursor-pointer overflow-hidden ${
                   phase === "PAUSED"
                     ? "bg-[var(--stage-card)] border-[var(--line)] text-slate-500 opacity-60 cursor-not-allowed"
+                    : streakTier === "overdrive"
+                    ? "bg-gradient-to-r from-red-600 via-amber-500 to-fuchsia-600 border-yellow-300 text-slate-950 animate-overdrive-aura"
+                    : streakTier === "turbo"
+                    ? "bg-gradient-to-r from-amber-500 via-orange-500 to-red-500 border-amber-200 text-slate-950 animate-fire-border"
                     : isLeft
-                    ? "bg-gradient-to-r from-[var(--cyan)] to-cyan-300 border-cyan-100 text-slate-950 box-glow-cyan"
-                    : "bg-gradient-to-r from-[var(--amber)] to-amber-300 border-amber-100 text-slate-950 box-glow-amber"
+                    ? "bg-gradient-to-r from-[var(--cyan)] via-sky-400 to-cyan-300 border-cyan-100 text-slate-950 box-glow-cyan hover:brightness-110"
+                    : "bg-gradient-to-r from-[var(--amber)] via-amber-400 to-orange-300 border-amber-100 text-slate-950 box-glow-amber hover:brightness-110"
                 }`}
               >
-                {phase === "PAUSED" ? (
-                  <div className="flex items-center gap-2 text-xl tracking-wider text-amber-300">
-                    <Pause className="w-6 h-6 animate-pulse" />
-                    <span>PAUSED</span>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2.5">
-                    <Flame className="w-8 h-8 animate-bounce" />
-                    <span>TAP ⚡</span>
-                  </div>
+                {/* Inner Energy Charge Radial Ring Background */}
+                {phase !== "PAUSED" && (
+                  <div
+                    className="absolute inset-0 opacity-20 pointer-events-none"
+                    style={{
+                      background: `conic-gradient(from 0deg, rgba(255,255,255,0.6) 0%, rgba(255,255,255,0.6) ${Math.min(100, (tapStreak / 20) * 100)}%, transparent ${Math.min(100, (tapStreak / 20) * 100)}%, transparent 100%)`,
+                    }}
+                  />
                 )}
+
+                {/* Left Side: Team Crest Badge */}
+                <div className="relative z-10 flex items-center">
+                  {isLeft ? (
+                    <CyberTitanCrest size={44} className="drop-shadow-[0_0_10px_rgba(0,0,0,0.5)]" />
+                  ) : isRight ? (
+                    <SolarPhoenixCrest size={44} className="drop-shadow-[0_0_10px_rgba(0,0,0,0.5)]" />
+                  ) : (
+                    <Flame className="w-10 h-10 text-slate-900" />
+                  )}
+                </div>
+
+                {/* Center Action Label */}
+                <div className="relative z-10 flex flex-col items-center justify-center">
+                  {phase === "PAUSED" ? (
+                    <div className="flex items-center gap-2 text-xl tracking-wider text-amber-300">
+                      <Pause className="w-6 h-6 animate-pulse" />
+                      <span>PAUSED</span>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex items-center gap-2 text-3xl md:text-4xl font-black">
+                        {streakTier === "overdrive" ? (
+                          <span className="text-slate-950 drop-shadow-[0_0_8px_rgba(255,255,255,0.8)]">OVERDRIVE!</span>
+                        ) : streakTier === "turbo" ? (
+                          <span className="text-slate-950">TURBO TAP 🔥</span>
+                        ) : (
+                          <span>TAP ⚡</span>
+                        )}
+                      </div>
+                      <span className="text-[10px] font-mono-condensed font-bold tracking-widest text-slate-900/80 -mt-1">
+                        {streakTier === "overdrive"
+                          ? "5X MULTIPLIER"
+                          : streakTier === "turbo"
+                          ? "3X MULTIPLIER"
+                          : streakTier === "combo"
+                          ? "2X MULTIPLIER"
+                          : "PULL HARD"}
+                      </span>
+                    </>
+                  )}
+                </div>
+
+                {/* Right Side: Tactile Energy Charge Gauge / Icon */}
+                <div className="relative z-10 flex items-center justify-center w-11 h-11 rounded-2xl bg-black/20 backdrop-blur-sm border border-white/30">
+                  {phase === "PAUSED" ? (
+                    <Pause className="w-5 h-5 text-amber-300" />
+                  ) : streakTier === "overdrive" ? (
+                    <Sparkles className="w-6 h-6 text-yellow-200 animate-spin" />
+                  ) : streakTier === "turbo" ? (
+                    <Flame className="w-6 h-6 text-orange-950 animate-bounce" />
+                  ) : (
+                    <Zap className="w-6 h-6 text-slate-950" />
+                  )}
+                </div>
               </button>
             </div>
           </div>

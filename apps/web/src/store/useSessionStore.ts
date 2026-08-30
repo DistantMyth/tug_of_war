@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { PlayerRole, PlayerStatus, TeamId, YouView } from "@tow/shared";
+import { safeGetStorage, safeRemoveStorage, safeSetStorage } from "../utils/storage.js";
 
 const TOKEN_KEY = "tow_player_token";
 const PLAYER_ID_KEY = "tow_player_id";
@@ -24,22 +25,20 @@ interface SessionState {
 }
 
 export const useSessionStore = create<SessionState>((set) => ({
-  token: typeof window !== "undefined" ? localStorage.getItem(TOKEN_KEY) : null,
-  playerId: typeof window !== "undefined" ? localStorage.getItem(PLAYER_ID_KEY) : null,
-  label: typeof window !== "undefined" ? localStorage.getItem(PLAYER_LABEL_KEY) : null,
+  token: safeGetStorage(TOKEN_KEY),
+  playerId: safeGetStorage(PLAYER_ID_KEY),
+  label: safeGetStorage(PLAYER_LABEL_KEY),
   team: null,
   chaos: false,
   role: null,
   status: "online",
-  adminToken: typeof window !== "undefined" ? localStorage.getItem("tow_admin_token") : null,
-  displaySecret: typeof window !== "undefined" ? localStorage.getItem("tow_display_secret") : null,
+  adminToken: safeGetStorage("tow_admin_token"),
+  displaySecret: safeGetStorage("tow_display_secret"),
 
   setPlayerSession: ({ token, playerId, label }) => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem(TOKEN_KEY, token);
-      localStorage.setItem(PLAYER_ID_KEY, playerId);
-      localStorage.setItem(PLAYER_LABEL_KEY, label);
-    }
+    safeSetStorage(TOKEN_KEY, token);
+    safeSetStorage(PLAYER_ID_KEY, playerId);
+    safeSetStorage(PLAYER_LABEL_KEY, label);
     set({ token, playerId, label });
   },
 
@@ -55,27 +54,21 @@ export const useSessionStore = create<SessionState>((set) => ({
   },
 
   setAdminToken: (token) => {
-    if (typeof window !== "undefined") {
-      if (token) localStorage.setItem("tow_admin_token", token);
-      else localStorage.removeItem("tow_admin_token");
-    }
+    if (token) safeSetStorage("tow_admin_token", token);
+    else safeRemoveStorage("tow_admin_token");
     set({ adminToken: token });
   },
 
   setDisplaySecret: (secret) => {
-    if (typeof window !== "undefined") {
-      if (secret) localStorage.setItem("tow_display_secret", secret);
-      else localStorage.removeItem("tow_display_secret");
-    }
+    if (secret) safeSetStorage("tow_display_secret", secret);
+    else safeRemoveStorage("tow_display_secret");
     set({ displaySecret: secret });
   },
 
   clearSession: () => {
-    if (typeof window !== "undefined") {
-      localStorage.removeItem(TOKEN_KEY);
-      localStorage.removeItem(PLAYER_ID_KEY);
-      localStorage.removeItem(PLAYER_LABEL_KEY);
-    }
+    safeRemoveStorage(TOKEN_KEY);
+    safeRemoveStorage(PLAYER_ID_KEY);
+    safeRemoveStorage(PLAYER_LABEL_KEY);
     set({
       token: null,
       playerId: null,

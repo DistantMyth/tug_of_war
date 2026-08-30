@@ -271,6 +271,10 @@ export class MemoryGameRepository {
       wildSet.add(player.playerId);
       leftSet.delete(player.playerId);
       rightSet.delete(player.playerId);
+    } else {
+      leftSet.delete(player.playerId);
+      rightSet.delete(player.playerId);
+      wildSet.delete(player.playerId);
     }
 
     if (player.status === "online") {

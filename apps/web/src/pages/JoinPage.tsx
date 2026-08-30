@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { AlertCircle, ArrowRight, Clock, Loader2, RefreshCw, Sparkles, Zap } from "lucide-react";
+import { AlertCircle, ArrowRight, Clock, Loader2, RefreshCw, Sparkles, Swords, Zap, Shield, Flame } from "lucide-react";
 import { getApiUrl } from "../config/env.js";
 import { useGameStore } from "../store/useGameStore.js";
 import { useSessionStore } from "../store/useSessionStore.js";
 import { useUiStore } from "../store/useUiStore.js";
+import { ParticleBackground } from "../components/common/ParticleBackground.js";
+import { CyberTitanCrest, SolarPhoenixCrest } from "../components/common/TeamBadges.js";
 
 interface JoinErrorState {
   code: string;
@@ -200,42 +202,59 @@ export const JoinPage: React.FC = () => {
   }, [bootstrapPlayer]);
 
   return (
-    <div className="min-h-screen w-full bg-[#07090e] bg-cyber-grid flex flex-col items-center justify-center p-6 text-slate-100 relative overflow-hidden select-none">
-      {/* Background Accent */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-80 h-80 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
+    <div className="min-h-screen w-full bg-[#050811] bg-arena-stadium flex flex-col items-center justify-center p-6 text-slate-100 relative overflow-hidden select-none">
+      {/* Dynamic Ambient Particle Fog */}
+      <ParticleBackground mode="ambient" intensity="low" />
 
-      <div className="w-full max-w-sm z-10 flex flex-col items-center text-center space-y-8">
-        {/* Logo Icon */}
-        <div className="w-20 h-20 rounded-3xl bg-slate-900 border border-cyan-500/40 flex items-center justify-center text-cyan-400 box-glow-cyan shadow-2xl">
-          <Zap className="w-10 h-10 animate-pulse" />
+      {/* Radiant Glow Lights */}
+      <div className="absolute top-1/4 left-1/4 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-cyan-500/15 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute bottom-1/4 right-1/4 translate-x-1/2 translate-y-1/2 w-96 h-96 bg-amber-500/15 rounded-full blur-3xl pointer-events-none" />
+
+      <div className="w-full max-w-sm z-10 flex flex-col items-center text-center space-y-6">
+        {/* Dual Mascot Crest Hero Banner */}
+        <div className="flex items-center justify-center gap-4">
+          <div className="w-16 h-16 rounded-2xl bg-cyan-950/60 border-2 border-cyan-500/50 flex items-center justify-center box-glow-cyan">
+            <CyberTitanCrest size={40} />
+          </div>
+          <div className="w-10 h-10 rounded-full bg-slate-900 border border-slate-700 flex items-center justify-center text-amber-400">
+            <Swords className="w-5 h-5 animate-pulse" />
+          </div>
+          <div className="w-16 h-16 rounded-2xl bg-amber-950/60 border-2 border-amber-500/50 flex items-center justify-center box-glow-amber">
+            <SolarPhoenixCrest size={40} />
+          </div>
         </div>
 
         {/* Title */}
         <div className="space-y-2">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-cyan-500/30 bg-cyan-950/40 text-cyan-300 text-xs font-mono-condensed tracking-widest uppercase">
-            <Sparkles className="w-3.5 h-3.5" />
-            Orientation Battle 2026
+          <div className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full border border-cyan-500/40 bg-cyan-950/60 text-cyan-300 text-xs font-mono-condensed tracking-widest uppercase shadow-lg shadow-cyan-950/50">
+            <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+            <span>Orientation Battle 2026</span>
           </div>
-          <h1 className="text-4xl font-display uppercase tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-amber-400">
+          <h1 className="text-4xl md:text-5xl font-display uppercase tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-sky-200 to-amber-400 drop-shadow-[0_0_25px_rgba(0,240,255,0.4)]">
             Tug of War
           </h1>
-          <p className="text-xs font-mono-condensed text-slate-400 tracking-wider">
-            REAL-TIME MULTIPLAYER TEAM DUEL
+          <p className="text-xs font-mono-condensed text-slate-300 tracking-wider flex items-center justify-center gap-2">
+            <Zap className="w-3.5 h-3.5 text-cyan-400" />
+            REAL-TIME MULTIPLAYER ARENA DUEL
+            <Flame className="w-3.5 h-3.5 text-amber-400" />
           </p>
         </div>
 
         {/* Status / Error Box */}
-        <div className="w-full p-6 rounded-2xl bg-slate-900/90 border border-slate-800 backdrop-blur-xl flex flex-col items-center justify-center space-y-4 shadow-xl">
+        <div className="w-full p-6 rounded-3xl bg-slate-900/90 border-2 border-slate-800/80 backdrop-blur-2xl flex flex-col items-center justify-center space-y-4 shadow-2xl shadow-black/80">
           {loading ? (
             <>
-              <Loader2 className="w-8 h-8 text-cyan-400 animate-spin" />
-              <div className="text-xs font-mono-condensed text-slate-300 tracking-widest animate-pulse">
+              <div className="relative">
+                <Loader2 className="w-10 h-10 text-cyan-400 animate-spin" />
+                <div className="absolute inset-0 rounded-full border border-cyan-400/40 animate-ping" />
+              </div>
+              <div className="text-xs font-mono-condensed text-slate-200 tracking-widest animate-pulse font-bold">
                 {statusMessage}
               </div>
             </>
           ) : errorState ? (
             <div className="w-full flex flex-col items-center space-y-4 text-center">
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-amber-950/60 border border-amber-500/40 text-amber-300 text-[11px] font-mono-condensed uppercase tracking-wider font-bold">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-amber-950/70 border border-amber-500/50 text-amber-300 text-xs font-mono-condensed uppercase tracking-wider font-bold">
                 {errorState.code === "GAME_NOT_FOUND" ? (
                   <Clock className="w-3.5 h-3.5 text-amber-400" />
                 ) : (
@@ -248,14 +267,14 @@ export const JoinPage: React.FC = () => {
                 <div className="text-sm font-bold text-slate-100 font-display uppercase tracking-wide">
                   {errorState.title}
                 </div>
-                <div className="text-xs font-mono-condensed text-slate-400">
+                <div className="text-xs font-mono-condensed text-slate-300">
                   {errorState.description}
                 </div>
               </div>
 
               <button
                 onClick={() => bootstrapPlayer()}
-                className="w-full py-3 px-5 rounded-xl bg-gradient-to-r from-cyan-500 to-cyan-400 hover:from-cyan-400 hover:to-cyan-300 text-slate-950 font-display uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg transition-all active:scale-[0.98]"
+                className="w-full py-3.5 px-5 rounded-2xl bg-gradient-to-r from-cyan-500 to-cyan-400 hover:from-cyan-400 hover:to-cyan-300 text-slate-950 font-display uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-cyan-950/60 transition-all active:scale-[0.98]"
               >
                 <RefreshCw className="w-4 h-4" />
                 {errorState.buttonText}
@@ -264,12 +283,23 @@ export const JoinPage: React.FC = () => {
           ) : (
             <button
               onClick={() => bootstrapPlayer()}
-              className="w-full py-3.5 px-6 rounded-xl bg-gradient-to-r from-cyan-500 to-cyan-400 hover:from-cyan-400 hover:to-cyan-300 text-slate-950 font-display uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg transition-all"
+              className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-cyan-500 via-sky-400 to-cyan-300 hover:from-cyan-400 hover:to-cyan-200 text-slate-950 font-display text-lg uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-cyan-950/60 transition-all active:scale-[0.98]"
             >
               Enter Arena
-              <ArrowRight className="w-4 h-4" />
+              <ArrowRight className="w-5 h-5" />
             </button>
           )}
+        </div>
+
+        {/* Feature Badges Footer */}
+        <div className="flex items-center justify-center gap-4 text-[11px] font-mono-condensed text-slate-400">
+          <span className="flex items-center gap-1">
+            <Shield className="w-3.5 h-3.5 text-cyan-400" /> Instant Sync
+          </span>
+          <span>•</span>
+          <span className="flex items-center gap-1">
+            <Zap className="w-3.5 h-3.5 text-amber-400" /> Ultra Low-Latency
+          </span>
         </div>
       </div>
     </div>

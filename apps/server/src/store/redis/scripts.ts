@@ -570,7 +570,7 @@ if not phase then
   return cjson.encode({ ok = false, code = "GAME_NOT_FOUND", message = "Game not found" })
 end
 
-if phase ~= "COUNTDOWN" and phase ~= "RUNNING" then
+if phase ~= "COUNTDOWN" then
   return cjson.encode({ ok = false, code = "INVALID_PHASE", message = "Can only start RUNNING from COUNTDOWN" })
 end
 

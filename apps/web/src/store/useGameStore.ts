@@ -165,8 +165,14 @@ export const useGameStore = create<GameState>((set) => ({
         counts: publicState.counts ?? state.counts,
         scores: publicState.scores ?? state.scores,
         timing: publicState.timing ?? state.timing,
-        balancePlan: publicState.plan ?? state.balancePlan,
-        winner: publicState.winner ?? state.winner,
+        balancePlan: "plan" in publicState ? (publicState.plan ?? null) : state.balancePlan,
+        winner: "winner" in publicState ? (publicState.winner ?? null) : state.winner,
+        wildcard:
+          "chaosPlayerId" in publicState
+            ? publicState.chaosPlayerId
+              ? { playerId: publicState.chaosPlayerId, label: publicState.chaosLabel ?? "CHAOS" }
+              : null
+            : state.wildcard,
       };
     }),
 

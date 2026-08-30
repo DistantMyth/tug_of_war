@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { safeGetStorage, safeSetStorage } from "../utils/storage.js";
 
 export interface ToastMessage {
   id: string;
@@ -21,23 +22,19 @@ interface UiState {
 }
 
 export const useUiStore = create<UiState>((set) => ({
-  soundEnabled: typeof window !== "undefined" ? localStorage.getItem("tow_sound_enabled") !== "false" : true,
+  soundEnabled: safeGetStorage("tow_sound_enabled") !== "false",
   toasts: [],
   lastTapFeedbackAt: 0,
 
   setSoundEnabled: (soundEnabled) => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem("tow_sound_enabled", String(soundEnabled));
-    }
+    safeSetStorage("tow_sound_enabled", String(soundEnabled));
     set({ soundEnabled });
   },
 
   toggleSound: () =>
     set((state) => {
       const next = !state.soundEnabled;
-      if (typeof window !== "undefined") {
-        localStorage.setItem("tow_sound_enabled", String(next));
-      }
+      safeSetStorage("tow_sound_enabled", String(next));
       return { soundEnabled: next };
     }),
 

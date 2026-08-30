@@ -210,5 +210,56 @@ describe("GamePage Participant View", () => {
     expect(screen.getByText("100")).toBeInTheDocument();
     expect(screen.getByText("90")).toBeInTheDocument();
   });
+
+  it("escalates Combo Streak Gauge across tiers on consecutive taps", async () => {
+    useSessionStore.setState({ team: "left", role: "left" });
+    useGameStore.setState({ phase: "RUNNING" });
+
+    vi.spyOn(socketClient, "playerTap").mockResolvedValue({
+      ok: true,
+      data: { team: "left", scores: { left: 10, right: 10 }, seq: 1 },
+    });
+
+    render(
+      <BrowserRouter>
+        <GamePage />
+      </BrowserRouter>,
+    );
+
+    const tapBtn = screen.getByRole("button", { name: /tap for team left/i });
+
+    // Initial state: NORMAL PULL
+    expect(screen.getByText("NORMAL PULL")).toBeInTheDocument();
+
+    // 5 taps -> COMBO x2
+    for (let i = 0; i < 5; i++) {
+      fireEvent.click(tapBtn);
+    }
+    expect(screen.getByText("⚡ COMBO x2")).toBeInTheDocument();
+
+    // 5 more taps (total 10) -> TURBO x3
+    for (let i = 0; i < 5; i++) {
+      fireEvent.click(tapBtn);
+    }
+    expect(screen.getByText("🔥 TURBO x3")).toBeInTheDocument();
+
+    // 10 more taps (total 20) -> OVERDRIVE x5
+    for (let i = 0; i < 10; i++) {
+      fireEvent.click(tapBtn);
+    }
+    expect(screen.getByText("💥 OVERDRIVE x5")).toBeInTheDocument();
+  });
+
+  it("renders upgraded Team Portals with team titles in OPEN phase", () => {
+    render(
+      <BrowserRouter>
+        <GamePage />
+      </BrowserRouter>,
+    );
+
+    expect(screen.getByText("CYBER TITANS")).toBeInTheDocument();
+    expect(screen.getByText("SOLAR PHOENIX")).toBeInTheDocument();
+  });
 });
+
 
