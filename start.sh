@@ -9,13 +9,23 @@ set -e
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 cd "$DIR"
 
+PORT=${PORT:-3001}
+
 echo ""
 echo "================================================================="
 echo "  🚀 TUG OF WAR — HIGH-PERFORMANCE LAPTOP SERVER LAUNCHER"
 echo "================================================================="
 echo ""
 
-# 1. Build frontend production bundle if not present
+# 1. Clean up any existing process on port $PORT
+EXISTING_PID=$(lsof -ti:$PORT 2>/dev/null || true)
+if [ -n "$EXISTING_PID" ]; then
+  echo "🧹 Freeing port $PORT from previous process (PID: $EXISTING_PID)..."
+  kill -9 $EXISTING_PID 2>/dev/null || true
+  sleep 1
+fi
+
+# 2. Build frontend production bundle if not present
 if [ ! -f "apps/web/dist/index.html" ]; then
   echo "📦 Building optimized production frontend..."
   pnpm build
@@ -23,7 +33,7 @@ else
   echo "✓ Found existing build in apps/web/dist"
 fi
 
-# 2. Determine local IP address
+# 3. Determine local IP address
 LOCAL_IP=$(ip route get 1.1.1.1 2>/dev/null | awk '{print $7}' | head -n 1)
 if [ -z "$LOCAL_IP" ]; then
   LOCAL_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
@@ -31,8 +41,6 @@ fi
 if [ -z "$LOCAL_IP" ]; then
   LOCAL_IP="localhost"
 fi
-
-PORT=${PORT:-3001}
 
 echo ""
 echo "-----------------------------------------------------------------"
@@ -59,7 +67,7 @@ cleanup() {
 }
 trap cleanup SIGINT SIGTERM EXIT
 
-# 3. Start Backend Server
+# 4. Start Backend Server in Background
 echo "⚡ Starting backend server on port $PORT..."
 pnpm --filter @tow/server start &
 SERVER_PID=$!
@@ -67,10 +75,11 @@ SERVER_PID=$!
 # Wait briefly for server to bind
 sleep 2
 
-# 4. Optional Public Tunnel (for cellular/mobile players outside local Wi-Fi)
+# 5. Optional Public Tunnel (for cellular/mobile players outside local Wi-Fi)
 if [ "$1" == "--tunnel" ] || [ "$1" == "-t" ]; then
   echo ""
   echo "🌐 Starting public internet tunnel for mobile players..."
+  echo "-----------------------------------------------------------------"
   if command -v cloudflared &> /dev/null; then
     cloudflared tunnel --url "http://localhost:$PORT" &
     TUNNEL_PID=$!
@@ -78,12 +87,15 @@ if [ "$1" == "--tunnel" ] || [ "$1" == "-t" ]; then
     npx --yes localtunnel --port "$PORT" &
     TUNNEL_PID=$!
   fi
+  echo "-----------------------------------------------------------------"
+  echo ""
 else
-  echo "💡 Tip: To expose to public mobile data (4G/5G), run: ./start.sh --tunnel"
+  echo "💡 Tip: To expose to mobile 4G/5G players without same Wi-Fi, run:"
+  echo "        ./start.sh --tunnel"
 fi
 
 echo ""
-echo "🎉 Server is running! Press [Ctrl + C] to stop."
+echo "🎉 Server is live! Press [Ctrl + C] to stop."
 echo ""
 
 # Keep running
