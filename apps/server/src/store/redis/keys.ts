@@ -12,5 +12,6 @@ export const RedisKeys = {
   scoreRight: (gameId: string) => `tow:game:${gameId}:score:right`,
   plan: (gameId: string) => `tow:game:${gameId}:plan`,
   planMoves: (gameId: string) => `tow:game:${gameId}:plan:moves`,
+  playerSeq: (gameId: string) => `tow:game:${gameId}:seq:player`,
   rateLimitTap: (playerId: string) => `tow:rl:tap:${playerId}`,
 } as const;

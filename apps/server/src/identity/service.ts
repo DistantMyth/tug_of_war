@@ -187,7 +187,7 @@ export class PlayerIdentityService {
     const token = signPlayerToken(tokenClaims, this.tokenSecret);
 
     // FIX #4: Use atomicRegisterPlayer if supported (MemoryGameRepository) to prevent label races.
-    // This serializes concurrent registrations so each gets a unique sequential label.
+    // Atomically register the player through repository
     let newPlayer: StoredPlayer;
     if ("atomicRegisterPlayer" in this.repository && typeof (this.repository as any).atomicRegisterPlayer === "function") {
       const atomicResult = await (this.repository as any).atomicRegisterPlayer(
@@ -207,7 +207,6 @@ export class PlayerIdentityService {
       }
       newPlayer = atomicResult.value;
     } else {
-      // For RedisGameRepository: read-count then write (Redis Lua scripts make this atomic server-side)
       const countsResult = await this.repository.getCounts(currentGameId);
       const totalRegistered = countsResult.ok ? countsResult.value.total : 0;
       newPlayer = {

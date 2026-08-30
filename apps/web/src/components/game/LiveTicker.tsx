@@ -39,8 +39,18 @@ export const LiveTicker: React.FC<LiveTickerProps> = ({
   const rightLeading = scores.right > scores.left;
   const isTied = scores.left === scores.right;
 
+  const [tick, setTick] = React.useState<number>(() => Date.now());
+
+  React.useEffect(() => {
+    if (phase !== "RUNNING") return;
+    const interval = setInterval(() => {
+      setTick(Date.now());
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [phase]);
+
   // Derive remaining seconds for dynamic announcements
-  const now = Date.now();
+  const now = tick;
   const endTime = timing.endTime ?? now + 30000;
   const remainingSec = Math.max(0, Math.floor((endTime - now) / 1000));
   const isLast5Sec = remainingSec <= 5 && remainingSec > 0 && phase === "RUNNING";

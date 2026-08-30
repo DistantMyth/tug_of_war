@@ -793,4 +793,22 @@ export class RedisGameRepository {
   ): Promise<RateLimitResult> {
     return checkTapRateLimit(this.redis, playerId, config);
   }
+
+  async atomicRegisterPlayer(
+    gameId: string,
+    buildPlayer: (existingCount: number) => StoredPlayer,
+  ): Promise<RepositoryResult<StoredPlayer>> {
+    const gameResult = await this.getGame(gameId);
+    if (!gameResult.ok) {
+      return gameResult;
+    }
+    const seqKey = RedisKeys.playerSeq(gameId);
+    const seqNum = await this.redis.incr(seqKey);
+    const player = buildPlayer(seqNum - 1);
+    const addResult = await this.addOrUpdatePlayer(gameId, player);
+    if (!addResult.ok) {
+      return addResult;
+    }
+    return { ok: true, value: player };
+  }
 }
