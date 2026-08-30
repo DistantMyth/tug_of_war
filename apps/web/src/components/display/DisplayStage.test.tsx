@@ -29,8 +29,9 @@ describe("DisplayStage Component & Scene Router", () => {
     render(<DisplayStage isPreview={true} />);
 
     expect(screen.getByText(/Tug of War/i)).toBeInTheDocument();
-    expect(screen.getByText(/SCAN TO JOIN/i)).toBeInTheDocument();
-    expect(screen.getByText(/Team Signal/i)).toBeInTheDocument();
+    expect(screen.getByText(/SCAN TO ENTER ARENA/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/CYAN/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/AMBER/i).length).toBeGreaterThan(0);
   });
 
   it("renders TeamBalanceScene during BALANCING phase", () => {
@@ -78,8 +79,8 @@ describe("DisplayStage Component & Scene Router", () => {
     });
 
     render(<DisplayStage isPreview={true} />);
-    expect(screen.getByText(/TEAM CYAN/i)).toBeInTheDocument();
-    expect(screen.getByText(/TEAM AMBER/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/CYAN CREW/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/AMBER CREW/i).length).toBeGreaterThan(0);
     expect(screen.getByText("10,842")).toBeInTheDocument();
     expect(screen.getByText("9,931")).toBeInTheDocument();
   });

@@ -45,8 +45,8 @@ describe("GamePage Participant View", () => {
       </BrowserRouter>,
     );
 
-    expect(screen.getByText(/Select Your Team/i)).toBeInTheDocument();
-    const joinCyanBtn = screen.getByText(/JOIN CYAN/i);
+    expect(screen.getByRole("heading", { name: /choose your side/i })).toBeInTheDocument();
+    const joinCyanBtn = screen.getByRole("button", { name: /cyan/i });
     expect(joinCyanBtn).toBeInTheDocument();
 
     fireEvent.click(joinCyanBtn);
@@ -63,7 +63,7 @@ describe("GamePage Participant View", () => {
       </BrowserRouter>,
     );
 
-    const switchBtn = screen.getByText(/Switch to Amber/i);
+    const switchBtn = screen.getByRole("button", { name: /switch to amber/i });
     expect(switchBtn).toBeInTheDocument();
 
     fireEvent.click(switchBtn);
@@ -94,8 +94,8 @@ describe("GamePage Participant View", () => {
       </BrowserRouter>,
     );
 
-    expect(screen.getByText(/Team Balancing/i)).toBeInTheDocument();
-    const volunteerBtn = screen.getByText(/Volunteer & Switch Team/i);
+    expect(screen.getByRole("heading", { name: /balancing teams/i })).toBeInTheDocument();
+    const volunteerBtn = screen.getByRole("button", { name: /volunteer and switch/i });
     expect(volunteerBtn).toBeInTheDocument();
 
     fireEvent.click(volunteerBtn);
@@ -112,8 +112,8 @@ describe("GamePage Participant View", () => {
       </BrowserRouter>,
     );
 
-    expect(screen.getByText(/You are the Chaos Player ⚡/i)).toBeInTheDocument();
-    expect(screen.queryByText(/^TAP!$/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /chaos wildcard/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /tap for team/i })).not.toBeInTheDocument();
   });
 
   it("renders big TAP button during RUNNING phase and fires player:tap on click", () => {
@@ -134,14 +134,17 @@ describe("GamePage Participant View", () => {
       </BrowserRouter>,
     );
 
-    const tapBtn = screen.getByText(/^TAP!$/i);
+    const tapBtn = screen.getByRole("button", {
+      name: /tap for team left/i,
+    });
     expect(tapBtn).toBeInTheDocument();
+    expect(tapBtn).toBeEnabled();
 
     fireEvent.click(tapBtn);
-    expect(tapSpy).toHaveBeenCalled();
+    expect(tapSpy).toHaveBeenCalledTimes(1);
   });
 
-  it("disables TAP button during PAUSED phase", () => {
+  it("disables TAP button during PAUSED phase while preserving accessible name", () => {
     useSessionStore.setState({ team: "left", role: "left" });
     useGameStore.setState({ phase: "PAUSED" });
 
@@ -151,9 +154,42 @@ describe("GamePage Participant View", () => {
       </BrowserRouter>,
     );
 
-    const btn = screen.getByRole("button", { name: /PAUSED/i });
+    const btn = screen.getByRole("button", {
+      name: /tap for team left/i,
+    });
     expect(btn).toBeInTheDocument();
     expect(btn).toBeDisabled();
+    expect(screen.getAllByText(/PAUSED/i).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("maintains stable accessible name on tap control across RUNNING and PAUSED phases", () => {
+    useSessionStore.setState({ team: "left", role: "left" });
+
+    // 1. RUNNING phase: enabled with team-specific accessible label
+    useGameStore.setState({ phase: "RUNNING" });
+    const { unmount } = render(
+      <BrowserRouter>
+        <GamePage />
+      </BrowserRouter>,
+    );
+
+    const runningBtn = screen.getByRole("button", { name: /tap for team left/i });
+    expect(runningBtn).toBeEnabled();
+    expect(runningBtn).toHaveAttribute("aria-label", "Tap for team left");
+    unmount();
+
+    // 2. PAUSED phase: same accessible name, but disabled with visible PAUSED text
+    useGameStore.setState({ phase: "PAUSED" });
+    render(
+      <BrowserRouter>
+        <GamePage />
+      </BrowserRouter>,
+    );
+
+    const pausedBtn = screen.getByRole("button", { name: /tap for team left/i });
+    expect(pausedBtn).toBeDisabled();
+    expect(pausedBtn).toHaveAttribute("aria-label", "Tap for team left");
+    expect(screen.getAllByText(/PAUSED/i).length).toBeGreaterThanOrEqual(1);
   });
 
   it("renders victory announcement in FINISHED phase", () => {
@@ -170,6 +206,9 @@ describe("GamePage Participant View", () => {
       </BrowserRouter>,
     );
 
-    expect(screen.getByText(/YOUR TEAM WON!/i)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /your team won/i })).toBeInTheDocument();
+    expect(screen.getByText("100")).toBeInTheDocument();
+    expect(screen.getByText("90")).toBeInTheDocument();
   });
 });
+
