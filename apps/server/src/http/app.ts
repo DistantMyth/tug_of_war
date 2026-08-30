@@ -32,6 +32,7 @@ export function createApp(options?: AppOptions): express.Express {
   app.disable("x-powered-by");
   app.use(
     helmet({
+      contentSecurityPolicy: false,
       crossOriginResourcePolicy: false,
       crossOriginEmbedderPolicy: false,
     }),

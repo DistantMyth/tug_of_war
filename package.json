@@ -13,5 +13,8 @@
     "build": "pnpm --filter @tow/shared build && pnpm --filter @tow/server build && pnpm --filter @tow/web build",
     "typecheck": "pnpm -r typecheck",
     "test": "corepack pnpm --filter @tow/shared test && corepack pnpm --filter @tow/server test && corepack pnpm --filter @tow/web test"
+  },
+  "devDependencies": {
+    "playwright": "^1.62.1"
   }
 }
