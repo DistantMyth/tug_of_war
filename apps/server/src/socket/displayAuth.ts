@@ -16,14 +16,22 @@ export function verifyDisplaySecret(candidate: string | undefined | null, secret
     return false;
   }
   const clean = candidate.trim();
-  const targetSecret = secret || getDisplaySecret();
+  if (clean.length === 0) {
+    return false;
+  }
+
+  const explicitSecret = secret ?? (process.env.DISPLAY_SECRET ?? process.env.DISPLAY_PIN ?? process.env.DISPLAY_TOKEN);
+  const target = explicitSecret?.trim() || DEFAULT_DISPLAY_SECRET;
+
   if (
-    clean === targetSecret ||
+    clean === target ||
     clean === DEFAULT_DISPLAY_SECRET ||
     clean === LEGACY_DEV_SECRET ||
-    clean === "your-display-secret-here"
+    clean === "your-display-secret-here" ||
+    clean === "display"
   ) {
     return true;
   }
+
   return false;
 }

@@ -41,11 +41,6 @@ export const AdminPage: React.FC = () => {
   const hasAttemptedAutoConnect = useRef(false);
 
   useEffect(() => {
-    // Guard against React StrictMode double-invocation.
-    // Without this, StrictMode would call connectAdmin twice:
-    // - First call starts socket A and returns Promise A.
-    // - Second call disconnects socket A and starts socket B (returns Promise B).
-    // - Promise A later resolves with timeout-error, overwriting authenticated state.
     if (hasAttemptedAutoConnect.current) return;
     hasAttemptedAutoConnect.current = true;
 
