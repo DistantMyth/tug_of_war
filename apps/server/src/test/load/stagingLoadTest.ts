@@ -94,7 +94,8 @@ export async function runStagingLoadTest(): Promise<StagingMetrics> {
     const batch = Array.from({ length: Math.min(batchSize, targetClients - i) }, async (_, batchIdx) => {
       const start = Date.now();
       try {
-        const regRes = await fetch(`${baseUrl}/api/players/bootstrap`, {
+        // FIX #10: correct endpoint is /api/player/register, not /api/players/bootstrap
+        const regRes = await fetch(`${baseUrl}/api/player/register`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({}),
@@ -105,11 +106,18 @@ export async function runStagingLoadTest(): Promise<StagingMetrics> {
           return null;
         }
 
-        const regData = (await regRes.json()) as { token: string };
+        const regJson = (await regRes.json()) as { ok: boolean; data?: { token: string } };
+        if (!regJson.ok || !regJson.data?.token) {
+          connectionFailures++;
+          return null;
+        }
+
+        const token = regJson.data.token;
         const socket = ClientSocket(`${baseUrl}/game`, {
-          auth: { token: regData.token },
+          auth: { token },
           transports: ["websocket"],
         });
+
 
         return new Promise<ClientSocketType | null>((resolve) => {
           const timeout = setTimeout(() => {

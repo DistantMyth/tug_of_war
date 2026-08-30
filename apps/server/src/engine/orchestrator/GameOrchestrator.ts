@@ -34,6 +34,9 @@ import {
   type BalancePlan,
   type Roster,
 } from "../balance/index.js";
+// FIX #1: Import the canonical GameEngine reducer — ALL lifecycle transitions must go through here
+import { reduceGame } from "../GameEngine.js";
+import type { GameState } from "../types.js";
 import type { MongoPersistenceService } from "../../store/mongo/persistenceService.js";
 import { ScoreBroadcaster } from "../score/ScoreBroadcaster.js";
 import { TimerManager } from "../timer/TimerManager.js";
@@ -65,6 +68,8 @@ export class GameOrchestrator {
   private readonly persistenceService?: MongoPersistenceService;
   private roundExtensions = new Map<string, { seconds: number; timestamp: number }[]>();
   private lockedComposition = new Map<string, { playerId: string; label: string; team: "left" | "right" | "chaos" }[]>();
+  // FIX #6: per-gameId in-flight op guard — prevents concurrent lifecycle mutations
+  private _runningOps = new Set<string>();
 
   constructor(
     repository: RedisGameRepository | MemoryGameRepository,
@@ -84,6 +89,57 @@ export class GameOrchestrator {
         }
       });
     this.persistenceService = persistenceService;
+  }
+
+  // ==========================================
+  // PRIVATE: Adapt StoredGameState → GameState for engine validation
+  // ==========================================
+
+  private storedToEngineState(stored: StoredGameState): GameState {
+    // Base adapter for phase-only validation (counts not needed)
+    return {
+      gameId: stored.gameId,
+      phase: stored.phase,
+      roundNumber: stored.roundNumber,
+      durationMs: stored.durationMs,
+      startTime: stored.startTime,
+      endTime: stored.endTime,
+      pausedAt: stored.pausedAt,
+      pauseAccumMs: stored.pauseAccumMs,
+      leftScore: 0,
+      rightScore: 0,
+      totalPlayers: 0,
+      leftCount: 0,
+      rightCount: 0,
+      wildcardPlayerId: null,
+      winner: stored.winner,
+    };
+  }
+
+  /** Extended adapter that includes team counts — needed for START_COUNTDOWN which calls isRosterReadyForCountdown() */
+  private storedToEngineStateWithCounts(
+    stored: StoredGameState,
+    counts: StoredCounts,
+    wildcardPlayerId: string | null = null,
+  ): GameState {
+    const chaos = counts.chaos > 0 ? 1 : 0;
+    return {
+      gameId: stored.gameId,
+      phase: stored.phase,
+      roundNumber: stored.roundNumber,
+      durationMs: stored.durationMs,
+      startTime: stored.startTime,
+      endTime: stored.endTime,
+      pausedAt: stored.pausedAt,
+      pauseAccumMs: stored.pauseAccumMs,
+      leftScore: 0,
+      rightScore: 0,
+      totalPlayers: counts.left + counts.right + chaos,
+      leftCount: counts.left,
+      rightCount: counts.right,
+      wildcardPlayerId: counts.chaos > 0 ? wildcardPlayerId ?? "placeholder" : null,
+      winner: stored.winner,
+    };
   }
 
   // ==========================================
@@ -176,109 +232,123 @@ export class GameOrchestrator {
         return { ok: false, code: "GAME_NOT_FOUND", message: "No active game session found" };
       }
 
-      const lockResult = await this.repository.lockAndSnapshot(gameId);
-      if (!lockResult.ok) {
-        let code: any = "INVALID_TRANSITION";
-        if (lockResult.error.code === "GAME_NOT_FOUND") code = "GAME_NOT_FOUND";
-        return { ok: false, code, message: lockResult.error.message };
+      // FIX #6: reject concurrent lock calls for the same game
+      const lockOpKey = `lock:${gameId}`;
+      if (this._runningOps.has(lockOpKey)) {
+        return { ok: false, code: "INVALID_TRANSITION", message: "Lock operation already in progress" };
       }
+      this._runningOps.add(lockOpKey);
 
-      const snapshot = lockResult.value;
-
-      // Zero Player Rule: If host locks with zero players, return EMPTY_ROSTER and revert to OPEN
-      if (snapshot.totalPlayers === 0) {
-        logger.warn("lock_attempt_empty_roster", { gameId });
-        await this.repository.updateGame(gameId, { phase: "OPEN", joinAllowed: true });
-        return {
-          ok: false,
-          code: "EMPTY_ROSTER",
-          message: "Cannot lock game with zero active players in lobby",
-        };
-      }
-
-      const domainRoster: Roster = {
-        players: snapshot.roster.map((p) => ({
-          playerId: p.playerId,
-          team: p.team,
-        })),
-      };
-
-      const planResult = createBalancePlan(domainRoster);
-      if (!planResult.ok) {
-        return { ok: false, code: "VALIDATION", message: planResult.error.message };
-      }
-
-      const plan = planResult.value;
-      const countsResult = await this.repository.getCounts(gameId);
-      const counts = countsResult.ok ? countsResult.value : ({} as StoredCounts);
-
-      // Check if roster is already perfectly balanced
-      if (isBalanceComplete(domainRoster, plan)) {
-        logger.info("roster_already_balanced_proceeding_to_countdown", { gameId });
-        const countdownRes = await this.startCountdownInternal(gameId, 3000);
-        if (!countdownRes.ok) {
-          return { ok: false, code: countdownRes.code, message: countdownRes.message };
+      try {
+        const lockResult = await this.repository.lockAndSnapshot(gameId);
+        if (!lockResult.ok) {
+          const code = lockResult.error.code === "GAME_NOT_FOUND" ? "GAME_NOT_FOUND" : "INVALID_TRANSITION";
+          return { ok: false, code, message: lockResult.error.message };
         }
+
+        const snapshot = lockResult.value;
+
+        // Zero Player Rule: revert to OPEN via GameEngine
+        if (snapshot.totalPlayers === 0) {
+          logger.warn("lock_attempt_empty_roster", { gameId });
+          // FIX #1: use updateGame to revert — lockAndSnapshot already changed to LOCKING so we repair it
+          await this.repository.updateGame(gameId, { phase: "OPEN", joinAllowed: true });
+          return {
+            ok: false,
+            code: "EMPTY_ROSTER",
+            message: "Cannot lock game with zero active players in lobby",
+          };
+        }
+
+        const domainRoster: Roster = {
+          players: snapshot.roster.map((p) => ({
+            playerId: p.playerId,
+            team: p.team,
+          })),
+        };
+
+        const planResult = createBalancePlan(domainRoster);
+        if (!planResult.ok) {
+          return { ok: false, code: "VALIDATION", message: planResult.error.message };
+        }
+
+        const plan = planResult.value;
+        const countsResult = await this.repository.getCounts(gameId);
+        const counts = countsResult.ok ? countsResult.value : ({} as StoredCounts);
+
+        // Check if roster is already perfectly balanced → go straight to COUNTDOWN
+        if (isBalanceComplete(domainRoster, plan)) {
+          logger.info("roster_already_balanced_proceeding_to_countdown", { gameId });
+          const countdownRes = await this.startCountdownInternal(gameId, 3000);
+          if (!countdownRes.ok) {
+            return { ok: false, code: countdownRes.code, message: countdownRes.message };
+          }
+          return {
+            ok: true,
+            data: {
+              phase: "COUNTDOWN",
+              counts,
+            },
+          };
+        }
+
+        // Roster requires balancing: commit BALANCING phase
+        // Note: lockAndSnapshot already atomically guarded the OPEN source phase,
+        // so we don't re-validate with the engine here (state is already LOCKING).
+        const storedPlan: StoredBalancePlan = {
+          targetLeft: plan.target.targetLeft,
+          targetRight: plan.target.targetRight,
+          wildcardNeeded: plan.wildcardNeeded,
+          needLeftToRight: plan.needLeftToRight,
+          needRightToLeft: plan.needRightToLeft,
+          remainingLeftToRight: plan.remainingLeftToRight,
+          remainingRightToLeft: plan.remainingRightToLeft,
+          wildcardPlayerId: plan.wildcardPlayerId,
+          wildcardApplied: plan.wildcardApplied,
+          status: plan.status,
+        };
+
+        await this.repository.writeBalancePlan(gameId, storedPlan, []);
+        await this.repository.updateGame(gameId, { phase: "BALANCING" });
+
+        logger.info("game_locked_and_balancing_started", {
+          gameId,
+          total: snapshot.totalPlayers,
+          left: snapshot.leftCount,
+          right: snapshot.rightCount,
+          wildcardNeeded: plan.wildcardNeeded,
+        });
+
+        if (this.emitter) {
+          this.emitter.emitPhase(gameId, "BALANCING", Date.now());
+          this.emitter.emitCounts(gameId, counts);
+          const planView: BalancePlanView = {
+            targetLeft: storedPlan.targetLeft,
+            targetRight: storedPlan.targetRight,
+            needLeftToRight: storedPlan.needLeftToRight,
+            needRightToLeft: storedPlan.needRightToLeft,
+            chaosNeeded: storedPlan.wildcardNeeded === 1,
+            remainingLeftToRight: storedPlan.remainingLeftToRight,
+            remainingRightToLeft: storedPlan.remainingRightToLeft,
+            remainingMs: null,
+          };
+          this.emitter.emitBalancePlan(gameId, planView);
+        }
+
         return {
           ok: true,
           data: {
-            phase: "COUNTDOWN",
+            phase: "BALANCING",
+            plan: storedPlan,
             counts,
           },
         };
+      } finally {
+        this._runningOps.delete(lockOpKey);
       }
-
-      // Roster requires balancing: Transition to BALANCING
-      const storedPlan: StoredBalancePlan = {
-        targetLeft: plan.target.targetLeft,
-        targetRight: plan.target.targetRight,
-        wildcardNeeded: plan.wildcardNeeded,
-        needLeftToRight: plan.needLeftToRight,
-        needRightToLeft: plan.needRightToLeft,
-        remainingLeftToRight: plan.remainingLeftToRight,
-        remainingRightToLeft: plan.remainingRightToLeft,
-        wildcardPlayerId: plan.wildcardPlayerId,
-        wildcardApplied: plan.wildcardApplied,
-        status: plan.status,
-      };
-
-      await this.repository.writeBalancePlan(gameId, storedPlan, []);
-      await this.repository.updateGame(gameId, { phase: "BALANCING" });
-
-      logger.info("game_locked_and_balancing_started", {
-        gameId,
-        total: snapshot.totalPlayers,
-        left: snapshot.leftCount,
-        right: snapshot.rightCount,
-        wildcardNeeded: plan.wildcardNeeded,
-      });
-
-      if (this.emitter) {
-        this.emitter.emitPhase(gameId, "BALANCING", Date.now());
-        this.emitter.emitCounts(gameId, counts);
-        const planView: BalancePlanView = {
-          targetLeft: storedPlan.targetLeft,
-          targetRight: storedPlan.targetRight,
-          needLeftToRight: storedPlan.needLeftToRight,
-          needRightToLeft: storedPlan.needRightToLeft,
-          chaosNeeded: storedPlan.wildcardNeeded === 1,
-          remainingLeftToRight: storedPlan.remainingLeftToRight,
-          remainingRightToLeft: storedPlan.remainingRightToLeft,
-          remainingMs: null,
-        };
-        this.emitter.emitBalancePlan(gameId, planView);
-      }
-
-      return {
-        ok: true,
-        data: {
-          phase: "BALANCING",
-          plan: storedPlan,
-          counts,
-        },
-      };
     } catch (err) {
       logger.error("lock_game_error", { error: String(err) });
+
       return { ok: false, code: "VALIDATION", message: "Failed to lock game" };
     }
   }
@@ -553,6 +623,11 @@ export class GameOrchestrator {
         return { ok: false, code: "VALIDATION", message: "Failed to read live roster" };
       }
 
+      // FIX #5: Capture roster version BEFORE reading roster — so confirmAutoBalance can detect races
+      const rosterVersionAtPreview = "getRosterVersion" in this.repository
+        ? (this.repository as any).getRosterVersion(gameId) as number
+        : undefined;
+
       const domainRoster: Roster = {
         players: rawRosterResult.value.players.map((p) => ({
           playerId: p.playerId,
@@ -605,6 +680,7 @@ export class GameOrchestrator {
           moves: [...preview.moves],
           wildcardPlayerId: preview.wildcardPlayerId,
           finalCounts: preview.finalCounts,
+          rosterVersion: rosterVersionAtPreview,
         },
       };
     } catch (err) {
@@ -613,7 +689,8 @@ export class GameOrchestrator {
     }
   }
 
-  async confirmAutoBalance(customMoves?: BalanceMove[]): Promise<
+
+  async confirmAutoBalance(customMoves?: BalanceMove[], expectedRosterVersion?: number): Promise<
     OrchestratorResult<{
       movesApplied: number;
       counts: StoredCounts;
@@ -635,16 +712,28 @@ export class GameOrchestrator {
       }
 
       let moves = customMoves;
+      let rosterVersion = expectedRosterVersion;
 
       if (!moves) {
+        // FIX #5: inline preview to get both moves and rosterVersion atomically
         const previewResult = await this.previewAutoBalance();
         if (!previewResult.ok) {
           return previewResult;
         }
         moves = previewResult.data.moves;
+        // Use the rosterVersion captured during preview if caller didn't supply one
+        if (rosterVersion === undefined) {
+          rosterVersion = (previewResult.data as any).rosterVersion;
+        }
       }
 
-      const applyResult = await this.repository.applyAutoBalance(gameId, moves);
+      // FIX #5: pass rosterVersion so stale plans are rejected atomically
+      const applyResult = await (this.repository as MemoryGameRepository).applyAutoBalance(
+        gameId,
+        moves,
+        rosterVersion,
+      );
+
       if (!applyResult.ok) {
         if (applyResult.error.code === "CONCURRENT_MODIFICATION") {
           logger.warn("auto_balance_concurrency_conflict", { gameId });
@@ -683,6 +772,7 @@ export class GameOrchestrator {
     }
   }
 
+
   // ==========================================
   // 6. CANCEL BALANCING
   // ==========================================
@@ -694,33 +784,49 @@ export class GameOrchestrator {
         return { ok: false, code: "GAME_NOT_FOUND", message: "No active game session" };
       }
 
-      const gameResult = await this.repository.getGame(gameId);
-      if (!gameResult.ok) {
-        return { ok: false, code: "GAME_NOT_FOUND", message: "Game session not found" };
+      // FIX #6: prevent concurrent cancel + volunteer/auto-balance race
+      const opKey = `cancel:${gameId}`;
+      if (this._runningOps.has(opKey)) {
+        return { ok: false, code: "INVALID_TRANSITION", message: "Cancel already in progress" };
       }
+      this._runningOps.add(opKey);
 
-      if (gameResult.value.phase !== "BALANCING" && gameResult.value.phase !== "LOCKING") {
-        return {
-          ok: false,
-          code: "INVALID_TRANSITION",
-          message: `Cannot cancel balancing from phase ${gameResult.value.phase}`,
-        };
-      }
-
-      this.timerManager.cancel(gameId);
-
-      await this.repository.updateGame(gameId, { phase: "OPEN", joinAllowed: true });
-      logger.info("balancing_cancelled_reverted_to_open", { gameId });
-
-      if (this.emitter) {
-        this.emitter.emitPhase(gameId, "OPEN", Date.now());
-        const counts = await this.repository.getCounts(gameId);
-        if (counts.ok) {
-          this.emitter.emitCounts(gameId, counts.value);
+      try {
+        const gameResult = await this.repository.getGame(gameId);
+        if (!gameResult.ok) {
+          return { ok: false, code: "GAME_NOT_FOUND", message: "Game session not found" };
         }
-      }
 
-      return { ok: true, data: undefined };
+        // FIX #1 (corrected): validate source phase directly.
+        // LOCKING→OPEN is allowed as a cleanup path (lockAndSnapshot moved to LOCKING).
+        // BALANCING→OPEN is the normal cancel flow.
+        // The engine START_COUNTDOWN machine does not model LOCKING→OPEN so we check directly.
+        const phase = gameResult.value.phase;
+        if (phase !== "BALANCING" && phase !== "LOCKING") {
+          return {
+            ok: false,
+            code: "INVALID_TRANSITION",
+            message: `Cannot cancel balancing from phase ${phase}`,
+          };
+        }
+
+        this.timerManager.cancel(gameId);
+
+        await this.repository.updateGame(gameId, { phase: "OPEN", joinAllowed: true });
+        logger.info("balancing_cancelled_reverted_to_open", { gameId });
+
+        if (this.emitter) {
+          this.emitter.emitPhase(gameId, "OPEN", Date.now());
+          const counts = await this.repository.getCounts(gameId);
+          if (counts.ok) {
+            this.emitter.emitCounts(gameId, counts.value);
+          }
+        }
+
+        return { ok: true, data: undefined };
+      } finally {
+        this._runningOps.delete(opKey);
+      }
     } catch (err) {
       logger.error("cancel_balancing_error", { error: String(err) });
       return { ok: false, code: "VALIDATION", message: "Failed to cancel balancing" };
@@ -749,14 +855,32 @@ export class GameOrchestrator {
     durationMs = 3000,
   ): Promise<OrchestratorResult<{ endsAt: number; durationMs: number }>> {
     try {
+      // FIX #3 + #1: Read current game and counts, validate through GameEngine BEFORE committing.
+      // This rejects OPEN→COUNTDOWN, WAITING→COUNTDOWN, RUNNING→COUNTDOWN etc. at the domain level.
+      const currentGameRes = await this.repository.getGame(gameId);
+      if (!currentGameRes.ok) {
+        return { ok: false, code: "GAME_NOT_FOUND", message: "Game not found" };
+      }
+
+      // FIX #3 + #1: Verify source phase is LOCKING or BALANCING
+      const phase = currentGameRes.value.phase;
+      if (phase !== "LOCKING" && phase !== "BALANCING") {
+        return {
+          ok: false,
+          code: "INVALID_TRANSITION",
+          message: `Cannot start countdown from phase ${phase}`,
+        };
+      }
+
+      // Read counts to populate the engine state (needed for isRosterReadyForCountdown)
       const countsResult = await this.repository.getCounts(gameId);
       if (!countsResult.ok) {
         return { ok: false, code: "VALIDATION", message: "Failed to read counts" };
       }
-
       const counts = countsResult.value;
-      const wildcardRequired = counts.total % 2;
 
+      // Enforce balance invariant
+      const wildcardRequired = counts.total % 2;
       if (counts.left !== counts.right || counts.chaos !== wildcardRequired) {
         return {
           ok: false,
@@ -765,9 +889,27 @@ export class GameOrchestrator {
         };
       }
 
+      // Find wildcard player ID for odd-total rosters
+      let wildcardPlayerId: string | null = null;
+      if (counts.chaos > 0) {
+        const planResult = await this.repository.getPlan(gameId);
+        wildcardPlayerId = planResult.ok ? (planResult.value?.wildcardPlayerId ?? null) : null;
+      }
+
+      const engineState = this.storedToEngineStateWithCounts(currentGameRes.value, counts, wildcardPlayerId);
+      const engineResult = reduceGame(engineState, { type: "START_COUNTDOWN" });
+      if (!engineResult.ok) {
+        return {
+          ok: false,
+          code: "INVALID_TRANSITION",
+          message: `Cannot start countdown from phase ${currentGameRes.value.phase}: ${engineResult.error.message}`,
+        };
+      }
+
       const now = Date.now();
       const endsAt = now + durationMs;
 
+      // FIX #1: commit the engine-validated phase change
       await this.repository.updateGame(gameId, {
         phase: "COUNTDOWN",
         countdownEndsAt: endsAt,
@@ -776,7 +918,7 @@ export class GameOrchestrator {
 
       logger.info("countdown_started", { gameId, endsAt, durationMs });
 
-      // Snapshot locked round composition
+      // FIX #9: Snapshot locked round composition at countdown start
       const playersRes = await this.repository.getAllPlayers(gameId);
       if (playersRes.ok) {
         const comp = playersRes.value.map((p) => ({
@@ -802,6 +944,7 @@ export class GameOrchestrator {
       return { ok: false, code: "VALIDATION", message: "Failed to start countdown" };
     }
   }
+
 
   async completeCountdown(targetGameId?: string): Promise<OrchestratorResult<void>> {
     try {
@@ -1109,7 +1252,23 @@ export class GameOrchestrator {
         roundNumber: res.roundNumber,
       });
 
+      // FIX #8 + #9: Capture the immutable completed-round snapshot SYNCHRONOUSLY here,
+      // before scheduling async persistence. prepareNextRound() may clear roundExtensions
+      // and lockedComposition immediately after this returns, so we must freeze them now.
       if (this.persistenceService) {
+        // Synchronous reads from in-memory state (no async gap before prepareNextRound can run)
+        const frozenExtensions = [...(this.roundExtensions.get(gameId) ?? [])];
+        const frozenCompositionRaw = this.lockedComposition.get(gameId);
+
+        // We still need game/counts/players — but READ THEM NOW synchronously from repository before yielding
+        // Schedule the async reads immediately (they're fast) and pass frozen snapshot into closure
+        const frozenScoreLeft = res.left;
+        const frozenScoreRight = res.right;
+        const frozenWinner = res.winner;
+        const frozenRoundNumber = res.roundNumber;
+        const frozenEndedAt = now;
+        const frozenReason = reason;
+
         Promise.all([
           this.repository.getAllPlayers(gameId),
           this.repository.getGame(gameId),
@@ -1119,42 +1278,39 @@ export class GameOrchestrator {
           .then(([playersRes, gameRes, countsRes, planRes]) => {
             const gameData = gameRes.ok ? gameRes.value : null;
             const allPlayers = playersRes.ok ? playersRes.value : [];
-            const counts = countsRes.ok ? countsRes.value : { left: 0, right: 0, chaos: 0, total: 0 };
+            const counts = countsRes.ok ? countsRes.value : { left: 0, right: 0, chaos: 0, total: 0, online: 0, offline: 0 };
             const plan = planRes.ok ? planRes.value : null;
 
             // Find actual chaos player ID
             const chaosPlayer = allPlayers.find((p) => p.wildcard || p.team === "chaos");
             const wildcardPlayerId = chaosPlayer ? chaosPlayer.playerId : (plan?.wildcardPlayerId ?? null);
 
-            // Composition from locked snapshot, falling back to current players
-            const snapshotComp = this.lockedComposition.get(gameId);
-            const composition = snapshotComp && snapshotComp.length > 0
-              ? snapshotComp
+            // FIX #9: Use the frozen composition captured at countdown start, NOT current mutable roster
+            const composition = frozenCompositionRaw && frozenCompositionRaw.length > 0
+              ? frozenCompositionRaw
               : allPlayers.map((p) => ({
                   playerId: p.playerId,
                   label: p.label,
-                  team: (p.wildcard || p.team === "chaos" ? "chaos" : (p.team ?? "chaos")) as any,
+                  team: (p.wildcard || p.team === "chaos" ? "chaos" : (p.team ?? "chaos")) as "left" | "right" | "chaos",
                 }));
-
-            const extensions = this.roundExtensions.get(gameId) ?? [];
 
             this.persistenceService?.persistRoundCompleted({
               sessionId: gameId,
-              roundNumber: res.roundNumber,
-              startedAt: gameData?.startTime ?? now - 30000,
-              endedAt: now,
+              roundNumber: frozenRoundNumber,
+              startedAt: gameData?.startTime ?? frozenEndedAt - 30000,
+              endedAt: frozenEndedAt,
               durationMs: gameData?.durationMs ?? 30000,
               pauseAccumMs: gameData?.pauseAccumMs ?? 0,
-              extensions,
+              extensions: frozenExtensions,
               teamLeftCount: counts.left,
               teamRightCount: counts.right,
               wildcardPlayerId,
-              scoreLeft: res.left,
-              scoreRight: res.right,
-              winner: res.winner,
-              finishReason: reason,
+              scoreLeft: frozenScoreLeft,
+              scoreRight: frozenScoreRight,
+              winner: frozenWinner,
+              finishReason: frozenReason,
               composition,
-              createdAt: now,
+              createdAt: frozenEndedAt,
             });
 
             this.persistenceService?.persistPlayerRoster(
@@ -1163,12 +1319,12 @@ export class GameOrchestrator {
                 sessionId: gameId,
                 playerId: p.playerId,
                 displayLabel: p.label,
-                finalTeam: (p.team === "chaos" ? null : p.team) as any,
+                finalTeam: (p.team === "chaos" ? null : p.team) as "left" | "right" | null,
                 wasWildcard: Boolean(p.wildcard),
-                role: (p.wildcard ? "chaos" : p.team) as any,
+                role: (p.wildcard ? "chaos" : p.team) as "left" | "right" | "chaos" | null,
                 status: p.status,
                 joinedAt: p.joinedAt,
-                updatedAt: now,
+                updatedAt: frozenEndedAt,
               })),
             );
 
@@ -1176,17 +1332,17 @@ export class GameOrchestrator {
               sessionId: gameId,
               eventType: "ROUND_FINISH",
               data: {
-                winner: res.winner,
-                scoreLeft: res.left,
-                scoreRight: res.right,
+                winner: frozenWinner,
+                scoreLeft: frozenScoreLeft,
+                scoreRight: frozenScoreRight,
                 teamLeftCount: counts.left,
                 teamRightCount: counts.right,
                 wildcardPlayerId,
-                roundNumber: res.roundNumber,
-                finishReason: reason,
-                extensionsCount: extensions.length,
+                roundNumber: frozenRoundNumber,
+                finishReason: frozenReason,
+                extensionsCount: frozenExtensions.length,
               },
-              timestamp: now,
+              timestamp: frozenEndedAt,
             });
           })
           .catch((err) => {

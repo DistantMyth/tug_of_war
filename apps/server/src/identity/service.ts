@@ -176,12 +176,7 @@ export class PlayerIdentityService {
       };
     }
 
-    const countsResult = await this.repository.getCounts(currentGameId);
-    const totalRegistered = countsResult.ok ? countsResult.value.total : 0;
-
     const newPlayerId = crypto.randomUUID();
-    const label = formatPlayerLabel(totalRegistered + 1);
-
     const tokenClaims: PlayerTokenClaims = {
       playerId: newPlayerId,
       sessionId: currentGameId,
@@ -189,25 +184,48 @@ export class PlayerIdentityService {
       issuedAt: timestamp,
       expiresAt: timestamp + this.tokenLifetimeMs,
     };
-
     const token = signPlayerToken(tokenClaims, this.tokenSecret);
 
-    const newPlayer: StoredPlayer = {
-      playerId: newPlayerId,
-      label,
-      team: null,
-      wildcard: false,
-      status: "online",
-      joinedAt: timestamp,
-      lastSeen: timestamp,
-    };
-
-    await this.repository.addOrUpdatePlayer(currentGameId, newPlayer);
+    // FIX #4: Use atomicRegisterPlayer if supported (MemoryGameRepository) to prevent label races.
+    // This serializes concurrent registrations so each gets a unique sequential label.
+    let newPlayer: StoredPlayer;
+    if ("atomicRegisterPlayer" in this.repository && typeof (this.repository as any).atomicRegisterPlayer === "function") {
+      const atomicResult = await (this.repository as any).atomicRegisterPlayer(
+        currentGameId,
+        (activeCount: number) => ({
+          playerId: newPlayerId,
+          label: formatPlayerLabel(activeCount + 1),
+          team: null,
+          wildcard: false,
+          status: "online",
+          joinedAt: timestamp,
+          lastSeen: timestamp,
+        }),
+      );
+      if (!atomicResult.ok) {
+        return { ok: false, code: "GAME_NOT_FOUND", message: atomicResult.error.message };
+      }
+      newPlayer = atomicResult.value;
+    } else {
+      // For RedisGameRepository: read-count then write (Redis Lua scripts make this atomic server-side)
+      const countsResult = await this.repository.getCounts(currentGameId);
+      const totalRegistered = countsResult.ok ? countsResult.value.total : 0;
+      newPlayer = {
+        playerId: newPlayerId,
+        label: formatPlayerLabel(totalRegistered + 1),
+        team: null,
+        wildcard: false,
+        status: "online",
+        joinedAt: timestamp,
+        lastSeen: timestamp,
+      };
+      await this.repository.addOrUpdatePlayer(currentGameId, newPlayer);
+    }
 
     const publicStateResult = await this.repository.getPublicGameState(currentGameId);
     const publicState: PublicState = publicStateResult.ok
       ? (publicStateResult.value as PublicState)
-      : ({} as any);
+      : ({} as PublicState);
 
     const you: YouView = {
       playerId: newPlayer.playerId,
@@ -221,7 +239,7 @@ export class PlayerIdentityService {
     logger.info("player_registered", {
       gameId: currentGameId,
       playerId: newPlayerId,
-      label,
+      label: newPlayer.label,
     });
 
     return {

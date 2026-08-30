@@ -11,7 +11,10 @@ export type AutoBalancePreview = {
     chaos: number;
     total: number;
   };
+  /** FIX #5: roster version at preview time — used to detect volunteer moves between preview and confirm */
+  rosterVersion?: number;
 };
+
 
 export type OrchestratorResult<T = void> =
   | { ok: true; data: T }

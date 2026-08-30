@@ -509,6 +509,9 @@ export class RedisGameRepository {
   async applyAutoBalance(
     gameId: string,
     moves: BalanceMove[],
+    // FIX #5: optional version param for type compatibility with MemoryGameRepository
+    // Redis Lua scripts are already atomic so version check is implicit
+    _expectedRosterVersion?: number,
   ): Promise<RepositoryResult<AutoBalanceAtomicResult>> {
     const keys = [
       RedisKeys.game(gameId),

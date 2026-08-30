@@ -16,6 +16,7 @@ import type {
   NextRoundResult,
   PauseResult,
   RateLimitResult,
+  RepositoryError,
   RepositoryResult,
   ResumeResult,
   StartRunningResult,
@@ -56,6 +57,12 @@ export class MemoryGameRepository {
   private plans = new Map<string, StoredBalancePlan>();
   private planMoves = new Map<string, BalanceMove[]>();
   private rateLimits = new Map<string, { count: number; expiresAt: number }>();
+  // FIX #2: in-flight guard for startRunning to prevent concurrent COUNTDOWN→RUNNING
+  _startingGames = new Set<string>();
+  // FIX #4: per-game registration mutex (promise chain) to serialize concurrent registrations
+  private _registrationChain = new Map<string, Promise<void>>();
+  // FIX #5: roster version counter — incremented on every team-changing operation
+  private _rosterVersion = new Map<string, number>();
 
   // ==========================================
   // HELPERS
@@ -139,6 +146,8 @@ export class MemoryGameRepository {
     this.scores.set(state.gameId, { left: 0, right: 0 });
     this.plans.delete(state.gameId);
     this.planMoves.delete(state.gameId);
+    this._rosterVersion.set(state.gameId, 0); // FIX #5: initialize roster version
+    this._registrationChain.set(state.gameId, Promise.resolve()); // FIX #4: init mutex
     return { ok: true, value: deserialized };
   }
 
@@ -437,6 +446,8 @@ export class MemoryGameRepository {
     player.team = targetTeam;
     player.wildcard = false;
     player.lastSeen = Date.now();
+    // FIX #5: increment roster version so stale auto-balance plans are detected
+    this._rosterVersion.set(gameId, (this._rosterVersion.get(gameId) ?? 0) + 1);
 
     const countsResult = await this.getCounts(gameId);
     return {
@@ -444,7 +455,7 @@ export class MemoryGameRepository {
       value: {
         previousTeam,
         newTeam: targetTeam,
-        counts: countsResult.ok ? countsResult.value : ({} as any),
+        counts: countsResult.ok ? countsResult.value : ({} as StoredCounts),
       },
     };
   }
@@ -587,6 +598,8 @@ export class MemoryGameRepository {
     }
 
     player.team = expectedTo;
+    // FIX #5: increment roster version so stale auto-balance plans are detected
+    this._rosterVersion.set(gameId, (this._rosterVersion.get(gameId) ?? 0) + 1);
 
     if (plan.remainingLeftToRight === 0 && plan.remainingRightToLeft === 0) {
       plan.status = plan.wildcardNeeded === 1 && !plan.wildcardApplied ? "needs_wildcard" : "complete";
@@ -617,7 +630,7 @@ export class MemoryGameRepository {
         remainingLeftToRight: plan.remainingLeftToRight,
         remainingRightToLeft: plan.remainingRightToLeft,
         status: plan.status,
-        counts: countsResult.ok ? countsResult.value : ({} as any),
+        counts: countsResult.ok ? countsResult.value : ({} as StoredCounts),
       },
     };
   }
@@ -699,6 +712,8 @@ export class MemoryGameRepository {
       sequence: moves.length + 1,
     };
     moves.push(moveObj);
+    // FIX #5: increment roster version so stale auto-balance plans are detected
+    this._rosterVersion.set(gameId, (this._rosterVersion.get(gameId) ?? 0) + 1);
 
     const countsResult = await this.getCounts(gameId);
     return {
@@ -707,14 +722,19 @@ export class MemoryGameRepository {
         move: moveObj,
         wildcardPlayerId: playerId,
         status: plan.status,
-        counts: countsResult.ok ? countsResult.value : ({} as any),
+        counts: countsResult.ok ? countsResult.value : ({} as StoredCounts),
       },
     };
   }
 
+  /**
+   * FIX #5: Version-checked applyAutoBalance.
+   * expectedRosterVersion must match the current roster version; if roster changed since preview, reject.
+   */
   async applyAutoBalance(
     gameId: string,
     moves: BalanceMove[],
+    expectedRosterVersion?: number,
   ): Promise<RepositoryResult<AutoBalanceAtomicResult>> {
     const game = this.games.get(gameId);
     if (!game) {
@@ -725,6 +745,20 @@ export class MemoryGameRepository {
         ok: false,
         error: { code: "MOVE_NOT_ALLOWED", message: "Auto balance can only be applied during BALANCING phase" },
       };
+    }
+
+    // FIX #5: version check — if any team-changing op happened since preview, reject
+    if (expectedRosterVersion !== undefined) {
+      const currentVersion = this._rosterVersion.get(gameId) ?? 0;
+      if (currentVersion !== expectedRosterVersion) {
+        return {
+          ok: false,
+          error: {
+            code: "CONCURRENT_MODIFICATION",
+            message: `Roster changed since preview (expected v${expectedRosterVersion}, current v${currentVersion}). Please re-preview.`,
+          },
+        };
+      }
     }
 
     const playersMap = this.getPlayersMap(gameId);
@@ -792,15 +826,101 @@ export class MemoryGameRepository {
       plan.status = "complete";
     }
 
+    // FIX #5: bump roster version after applying moves
+    this._rosterVersion.set(gameId, (this._rosterVersion.get(gameId) ?? 0) + 1);
+
     const countsResult = await this.getCounts(gameId);
     return {
       ok: true,
       value: {
         movesApplied: moves.length,
         status: "complete",
-        counts: countsResult.ok ? countsResult.value : ({} as any),
+        counts: countsResult.ok ? countsResult.value : ({} as StoredCounts),
       },
     };
+  }
+
+  // FIX #4: atomic registration — returns the current roster version for use in plans
+  getRosterVersion(gameId: string): number {
+    return this._rosterVersion.get(gameId) ?? 0;
+  }
+
+  /**
+   * FIX #4: Atomically register a new player, serialized per-game to prevent label collisions.
+   * The promise chain ensures only one registration runs at a time per game.
+   */
+  async atomicRegisterPlayer(
+    gameId: string,
+    buildPlayer: (existingCount: number) => StoredPlayer,
+  ): Promise<RepositoryResult<StoredPlayer>> {
+    // Get or initialize the chain for this game
+    let chain = this._registrationChain.get(gameId);
+    if (!chain) {
+      chain = Promise.resolve();
+      this._registrationChain.set(gameId, chain);
+    }
+
+    let resolveOuter!: (p: StoredPlayer) => void;
+    let rejectOuter!: (e: RepositoryError) => void;
+    const resultPromise = new Promise<StoredPlayer>((res, rej) => {
+      resolveOuter = res;
+      rejectOuter = rej;
+    });
+
+    // Chain: each registration waits for the previous one to complete
+    const newChain = chain.then(async () => {
+      const game = this.games.get(gameId);
+      if (!game) {
+        rejectOuter({ code: "GAME_NOT_FOUND", message: "Game not found" });
+        return;
+      }
+      // Count only non-abandoned players for label sequence
+      const playersMap = this.getPlayersMap(gameId);
+      const activeCount = Array.from(playersMap.values()).filter((p) => p.status !== "abandoned").length;
+      const player = buildPlayer(activeCount);
+
+      const raw = serializePlayer(player);
+      const stored = deserializePlayer(raw)!;
+      playersMap.set(player.playerId, stored);
+
+      const leftSet = this.getLeftSet(gameId);
+      const rightSet = this.getRightSet(gameId);
+      const wildSet = this.getWildSet(gameId);
+
+      if (player.team === "left") {
+        leftSet.add(player.playerId);
+        rightSet.delete(player.playerId);
+        wildSet.delete(player.playerId);
+      } else if (player.team === "right") {
+        rightSet.add(player.playerId);
+        leftSet.delete(player.playerId);
+        wildSet.delete(player.playerId);
+      } else if (player.wildcard) {
+        wildSet.add(player.playerId);
+        leftSet.delete(player.playerId);
+        rightSet.delete(player.playerId);
+      }
+
+      if (player.status === "online") {
+        this.getOnlineSet(gameId).add(player.playerId);
+      } else {
+        this.getOnlineSet(gameId).delete(player.playerId);
+      }
+
+      resolveOuter({ ...stored });
+    }).catch((err) => {
+      rejectOuter({ code: "GAME_NOT_FOUND", message: String(err) });
+    });
+
+    this._registrationChain.set(gameId, newChain);
+
+    try {
+      const player = await resultPromise;
+      return { ok: true, value: player };
+    } catch (err) {
+      const e = err as RepositoryError;
+      return { ok: false, error: e };
+    }
   }
 
   async tapIncrement(
@@ -858,39 +978,53 @@ export class MemoryGameRepository {
     gameId: string,
     now = Date.now(),
   ): Promise<RepositoryResult<StartRunningResult>> {
-    const game = this.games.get(gameId);
-    if (!game) {
-      return { ok: false, error: { code: "GAME_NOT_FOUND", message: "Game not found" } };
-    }
-    if (game.phase !== "COUNTDOWN" && game.phase !== "RUNNING") {
+    // Atomically check and acquire lock — prevents concurrent COUNTDOWN→RUNNING races
+    if (this._startingGames.has(gameId)) {
       return {
         ok: false,
-        error: { code: "INVALID_PHASE", message: "Can only start RUNNING from COUNTDOWN" },
+        error: { code: "INVALID_PHASE", message: "startRunning already in progress for this game" },
       };
     }
+    this._startingGames.add(gameId);
+    try {
+      const game = this.games.get(gameId);
+      if (!game) {
+        return { ok: false, error: { code: "GAME_NOT_FOUND", message: "Game not found" } };
+      }
+      // CRITICAL FIX #2: only COUNTDOWN → RUNNING is valid. RUNNING → RUNNING resets scores, which is unacceptable.
+      if (game.phase !== "COUNTDOWN") {
+        return {
+          ok: false,
+          error: { code: "INVALID_PHASE", message: `Cannot start RUNNING from phase ${game.phase}. Only COUNTDOWN is valid.` },
+        };
+      }
 
-    const durationMs = game.durationMs || 30000;
-    const startTime = now;
-    const endTime = now + durationMs;
+      const durationMs = game.durationMs || 30000;
+      const startTime = now;
+      const endTime = now + durationMs;
 
-    game.phase = "RUNNING";
-    game.startTime = startTime;
-    game.endTime = endTime;
-    game.pausedAt = null;
-    game.pauseAccumMs = 0;
-    game.countdownEndsAt = null;
+      game.phase = "RUNNING";
+      game.startTime = startTime;
+      game.endTime = endTime;
+      game.pausedAt = null;
+      game.pauseAccumMs = 0;
+      game.countdownEndsAt = null;
 
-    this.scores.set(gameId, { left: 0, right: 0 });
+      // Scores are reset only on the legitimate COUNTDOWN→RUNNING transition
+      this.scores.set(gameId, { left: 0, right: 0 });
 
-    return {
-      ok: true,
-      value: {
-        phase: "RUNNING",
-        startTime,
-        endTime,
-        durationMs,
-      },
-    };
+      return {
+        ok: true,
+        value: {
+          phase: "RUNNING",
+          startTime,
+          endTime,
+          durationMs,
+        },
+      };
+    } finally {
+      this._startingGames.delete(gameId);
+    }
   }
 
   async pauseGame(
