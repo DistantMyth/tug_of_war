@@ -29,6 +29,24 @@ export function getPrimaryLocalIp(): string {
   return "localhost";
 }
 
+export function getGlobalIpv6(): string | null {
+  const interfaces = os.networkInterfaces();
+  for (const name of Object.keys(interfaces)) {
+    for (const iface of interfaces[name] || []) {
+      if (
+        iface.family === "IPv6" &&
+        !iface.internal &&
+        iface.scopeid === 0 &&
+        !iface.address.startsWith("fe80:") &&
+        !iface.address.startsWith("::1")
+      ) {
+        return iface.address;
+      }
+    }
+  }
+  return null;
+}
+
 healthRouter.get("/health", async (_req, res) => {
   const redisStatus = await checkRedisHealth();
   const report = buildHealthReport({
@@ -43,15 +61,22 @@ healthRouter.get("/health", async (_req, res) => {
 
 healthRouter.get("/api/network", (_req, res) => {
   const localIp = getPrimaryLocalIp();
+  const ipv6 = getGlobalIpv6();
   const port = Number(process.env.PORT ?? 3001);
   const publicUrl = process.env.PUBLIC_URL || process.env.TUNNEL_URL || null;
-  const joinUrl = publicUrl ? `${publicUrl.replace(/\/+$/, "")}/join` : `http://${localIp}:${port}/join`;
+  const joinUrl = publicUrl
+    ? `${publicUrl.replace(/\/+$/, "")}/join`
+    : `http://${localIp}:${port}/join`;
+  const ipv6JoinUrl = ipv6 ? `http://[${ipv6}]:${port}/join` : null;
+
   res.json({
     ok: true,
     localIp,
+    ipv6,
     port,
     publicUrl,
     joinUrl,
+    ipv6JoinUrl,
   });
 });
 

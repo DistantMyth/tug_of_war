@@ -33,7 +33,7 @@ else
   echo "✓ Found existing build in apps/web/dist"
 fi
 
-# 3. Determine local IP address
+# 3. Determine local IPv4 and global IPv6 address
 LOCAL_IP=$(ip route get 1.1.1.1 2>/dev/null | awk '{print $7}' | head -n 1)
 if [ -z "$LOCAL_IP" ]; then
   LOCAL_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
@@ -41,6 +41,8 @@ fi
 if [ -z "$LOCAL_IP" ]; then
   LOCAL_IP="localhost"
 fi
+
+IPV6_ADDR=$(ip -6 addr show scope global 2>/dev/null | grep inet6 | awk '{print $2}' | cut -d'/' -f1 | head -n 1 || true)
 
 # Handle clean shutdown on Ctrl+C / SIGTERM
 cleanup() {
@@ -180,18 +182,18 @@ if [ -z "$TUNNEL_URL" ]; then
   echo "================================================================="
   echo "  📺 Projector / Display:   http://$LOCAL_IP:$PORT/display"
   echo "  🛡️  Admin Dashboard:      http://localhost:$PORT/admin"
-  echo "  📱 Mobile Join Page:      http://$LOCAL_IP:$PORT/join"
+  echo "  📱 Mobile Join (Hotspot): http://$LOCAL_IP:$PORT/join"
+  if [ -n "$IPV6_ADDR" ]; then
+    echo "  🌐 Mobile Join (IPv6):    http://[$IPV6_ADDR]:$PORT/join"
+  fi
   echo "  🔌 Health Check:          http://localhost:$PORT/health"
   echo "================================================================="
   echo ""
-  echo "💡 Tip for 0-lag events:"
-  echo "   Connect phones to the same Wi-Fi router or turn on your laptop's"
-  echo "   Mobile Hotspot. Audience scans the QR code to join instantly!"
-  echo ""
-  echo "💡 Need a public tunnel over cellular? Options:"
-  echo "   ./start.sh --localtunnel  (Fast Localtunnel)"
-  echo "   ./start.sh --pinggy       (SSH Low-Latency Tunnel)"
-  echo "   ./start.sh --tunnel       (Cloudflare Tunnel)"
+  echo "💡 Direct Cellular & Wi-Fi Access:"
+  echo "   - On Same Wi-Fi / Hotspot: http://$LOCAL_IP:$PORT/join"
+  if [ -n "$IPV6_ADDR" ]; then
+    echo "   - Over 4G/5G Cellular (via rooted phone IPv6): http://[$IPV6_ADDR]:$PORT/join"
+  fi
 fi
 
 echo ""
